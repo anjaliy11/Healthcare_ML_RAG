@@ -59,3 +59,29 @@ def make_synthetic(n: int = 303, seed: int = 0, signal: float = 1.1) -> pd.DataF
     df.loc[rng.choice(n, 2, replace=False), "thal"] = np.nan
     df[TARGET] = num
     return df
+
+
+def make_kaggle_like(n: int = 400, seed: int = 3) -> pd.DataFrame:
+    """SYNTHETIC frame in the Kaggle Heart Failure schema (strings, 0 = missing chol/BP).
+
+    Derived from `make_synthetic`, then jittered so no two rows are identical."""
+    rng = np.random.default_rng(seed)
+    d = make_synthetic(n=n, seed=seed)
+    k = pd.DataFrame(
+        {
+            "Age": (d.age + rng.integers(-2, 3, n)).astype(int),
+            "Sex": d.sex.map({1.0: "M", 0.0: "F"}),
+            "ChestPainType": d.cp.map({1.0: "TA", 2.0: "ATA", 3.0: "NAP", 4.0: "ASY"}),
+            "RestingBP": (d.trestbps + rng.integers(-5, 6, n)).astype(int),
+            "Cholesterol": (d.chol + rng.integers(-15, 16, n)).astype(int),
+            "FastingBS": d.fbs.astype(int),
+            "RestingECG": d.restecg.map({0.0: "Normal", 1.0: "ST", 2.0: "LVH"}),
+            "MaxHR": (d.thalach + rng.integers(-4, 5, n)).astype(int),
+            "ExerciseAngina": d.exang.map({0.0: "N", 1.0: "Y"}),
+            "Oldpeak": (d.oldpeak + rng.normal(0, 0.1, n)).clip(0).round(2),
+            "ST_Slope": d.slope.map({1.0: "Up", 2.0: "Flat", 3.0: "Down"}),
+            "HeartDisease": (d.num > 0).astype(int),
+        }
+    )
+    k.loc[rng.random(n) < 0.15, "Cholesterol"] = 0
+    return k

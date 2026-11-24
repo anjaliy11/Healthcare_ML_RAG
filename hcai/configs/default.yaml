@@ -24,7 +24,14 @@ ml:
   band_low: 0.30            # demo-only cut-points, NOT clinical thresholds
   band_high: 0.60
   auc_floor: 0.80           # contract test: model is not broken
-  auc_ceiling: 0.96         # leakage alarm (Cleveland is expected around 0.88-0.93)
+  auc_ceiling: 0.96         # WARNING level only (Cleveland is typically 0.88-0.93); not a leakage test
+  auc_abort: 0.99           # implausible: stop and do not save
+  # Direct leakage checks (ml/leakage.py). Any one failing stops the run and nothing is saved.
+  leak_single_feature_max: 0.98   # one feature alone separating the classes this well = target proxy
+  leak_shuffle_max: 0.65          # baseline trained on shuffled labels must score ~0.5 on test
+  leak_shuffle_repeats: 5
+  leak_duplicate_frac_max: 0.05   # share of test rows that also occur in train
+  stability_splits: 100           # splits used by `python -m hcai stability`
   rf_trees: 200
   hgb_max_iter: 150
   permutation_repeats: 20
@@ -71,3 +78,6 @@ llm:
   timeout_s: 30.0
   max_retries: 2
   backoff_s: 1.0
+  deadline_s: 25.0          # ONE budget shared by all models/retries for a single answer
+  max_wait_s: 8.0           # longest server-requested (429 retryDelay) wait we will sit out
+  min_interval_s: 0.0       # >0 spaces calls (set ~4 for `hcai eval` on the free tier, 15 req/min)

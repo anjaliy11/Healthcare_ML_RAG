@@ -2,7 +2,7 @@
 
 **Demonstration prototype, not a medical device.** It does not diagnose or advise treatment.
 
-1. **ML**: heart-disease presence classifier on UCI Cleveland (LogReg / RandomForest / HistGradientBoosting), leakage-free pipeline, 5 metrics with bootstrap CIs.
+1. **ML**: heart-disease presence classifier on UCI Cleveland (LogReg / RandomForest / HistGradientBoosting and more), leakage-free pipeline, 5 metrics with bootstrap CIs; optional second dataset (Kaggle Heart Failure Prediction, 918 rows) for a comparison.
 2. **RAG**: question answering over 9 public WHO / CDC / NIDDK pages. Answers cite sources, and say so when the documents don't contain the answer.
 3. **Interface**: CLI and Streamlit app combining both (risk estimate + cited explanation of the top risk factors).
 
@@ -20,7 +20,7 @@ In VS Code: Ctrl+Shift+P → *Python: Select Interpreter* → `.venv`.
 
 **1. Verify the build (no internet or API key needed):**
 ```powershell
-python -m pytest            # expect: 152 passed, ~92% coverage
+python -m pytest            # expect: 219 passed, ~93% coverage
 python -m ruff check . ; python -m mypy
 ```
 **2. Real data and models (needs internet):**
@@ -30,7 +30,7 @@ python -m hcai train                   # ~1.5-3 min; metrics + CIs + plots -> ar
 python scripts/fetch_docs.py           # snapshots 9 documents + manifest.json
 python -m hcai index                   # downloads bge-small (~130 MB) first time
 python -m hcai eval                    # RAG eval + threshold recommendation
-python -m hcai status                  # shows what exists
+python -m hcai status                  # shows what exists + which hcai folder is loaded
 ```
 If a document fails to download, save its text by hand (use `## ` for headings) and run
 `python scripts/fetch_docs.py --add-local page.txt --doc-id ID --title T --url U --license L`.
@@ -41,7 +41,7 @@ If the UCI download fails, get `processed.cleveland.data` from the UCI page and 
 copy .env.example .env                 # optional: put GEMINI_API_KEY=... (free key: aistudio.google.com/apikey)
                                        # no key => extractive answers (still cited, no LLM)
 python -m hcai ask "What are the risk factors for high blood pressure?"
-python -m hcai assess --example > patient.json
+python -m hcai assess --example --out patient.json     # writes UTF-8 (do not use > in PowerShell 5)
 python -m hcai assess --input patient.json
 python -m streamlit run src/hcai/app/streamlit_app.py
 python -m hcai monitor                 # request metrics; add --drift-csv rows.csv for drift
@@ -49,11 +49,35 @@ python -m hcai monitor                 # request metrics; add --drift-csv rows.c
 `make <target>` works too where `make` exists (see Makefile). Offline demo without model download: `python -m hcai index --offline` (lexical only).
 VS Code: *Run and Debug* has ready configs (`.vscode/launch.json`); the Testing panel runs pytest.
 
-After `eval`, copy the recommended threshold into `rag.score_threshold` in `configs/default.yaml`, re-run `index`/`eval`.
+After `eval`, read the "Threshold trade-off" section: it shows the false-refusal / false-answer rates at the threshold in use and a suggestion that keeps false refusals ≤ 5%. Change `rag.score_threshold` only if you accept that trade, then re-run `eval`.
+
+**4. Compare runs and datasets** (details and interpretation rules: [docs/RUN_COMPARISON.md](docs/RUN_COMPARISON.md)):
+```powershell
+python -m hcai runs --import-metrics <old folder>\artifacts\reports\metrics.json --tag build02 --build 0.2 --assume-same-data
+python -m hcai train --tag build03
+python -m hcai train --dataset kaggle_heart_failure --source-file <path>\heart.csv --tag kaggle   # Kaggle: Heart Failure Prediction Dataset
+python -m hcai compare build02 build03
+python -m hcai compare build03 kaggle
+python -m hcai stability                # split-to-split AUC spread
+```
+
+## Troubleshooting (Windows)
+| Symptom | Fix |
+|---|---|
+| `status` prints a `hcai ... loaded from` path that is not this folder | An older install is shadowing it. In this folder: `pip install -e . --no-deps`. |
+| `train` stops with "Model NOT saved: …" | A leakage check failed (duplicates, a feature that alone predicts the target, or label-shuffle AUC far above 0.5). Read `artifacts\reports\model_report.md`; this is a real finding, not noise. A test AUC above 0.96 alone only prints a NOTE. |
+| CDC page 403 | `fetch_docs.py` retries with alternates (NHLBI) automatically and says which URL it used; if both fail use `--add-local`. |
+| `UnicodeDecodeError` reading patient.json | Fixed in 0.3 (UTF-16 handled). Prefer `--example --out patient.json`. |
+| `ask` slow (> 25 s) or "notes: llm_fallback:llm_error" | Free-tier quota or network: the answer is still produced from the extractive fallback. Wait a minute, or run `ask --no-llm`. |
+| Tests slow | `python -m pytest --durations=10` and look at the slowest. |
 
 ## Results
 Not stored here by design: run `python -m hcai train` and paste the table from `artifacts/reports/model_report.md`
-(test metrics with 95% CIs, CV ROC-AUC, calibration, ablations) and `rag_eval.md`. Sanity: Cleveland ROC-AUC is expected around 0.88-0.93; above 0.96 the training aborts as suspected leakage.
+(test metrics with 95% CIs, CV ROC-AUC, calibration, ablations, leakage checks) and `rag_eval.md`.
+Cleveland ROC-AUC is typically 0.88-0.93 but a 61-row test set moves by several points between splits, so a value above 0.96
+is only a warning. Training stops (and saves nothing) when a **direct** leakage check fails: train/test duplicate rows, a single feature that alone
+separates the classes, or a label-shuffle test AUC far from 0.5. Run `python -m hcai stability` to see the spread on your data.
+Run comparisons (build vs build, Cleveland vs Kaggle): `python -m hcai compare`, see [docs/RUN_COMPARISON.md](docs/RUN_COMPARISON.md). What changed in 0.3 and why: [docs/BUILD_NOTES.md](docs/BUILD_NOTES.md).
 
 ## Architecture
 ```
@@ -96,12 +120,12 @@ URLs are in `src/hcai/rag/fetch.py`. Do not commit text whose license you have n
 - **Dataset**: UCI Heart Disease (Cleveland), Detrano et al.; DOI 10.24432/C52P4X; fetched via `ucimlrepo`.
 - **Embedding model**: `BAAI/bge-small-en-v1.5` (Hugging Face, via sentence-transformers, runs locally on CPU).
 - **LLM / API**: Google Gemini API, free tier, default `gemini-3.5-flash-lite` with automatic fallback to `gemini-3.1-flash-lite` then `gemini-3.6-flash` when a model is rate-limited (needs `GEMINI_API_KEY`; temperature 0). Free-tier terms: Google may use prompts/responses to improve its products, so **never type real patient information**; the app sends only the question and retrieved document passages, never the 13 patient fields. Optional paid provider: Anthropic (`llm.provider: anthropic`). Without a key, answers are extractive.
-- **Libraries**: numpy, pandas, scikit-learn, scipy, joblib, pydantic, PyYAML, matplotlib, ucimlrepo, faiss-cpu, sentence-transformers (PyTorch), google-genai, streamlit, requests, beautifulsoup4; optional: anthropic; dev: pytest, pytest-cov, ruff, mypy.
+- **Libraries**: numpy, pandas, scikit-learn, scipy, joblib, pydantic, PyYAML, matplotlib, ucimlrepo, threadpoolctl, faiss-cpu, sentence-transformers (PyTorch), google-genai, streamlit, requests, beautifulsoup4; optional: anthropic; dev: pytest, pytest-cov, ruff, mypy.
 - Built with AI assistance (Claude); be ready to explain every module, see `docs/DESIGN.md` for the reasoning.
 
 ## Testing
-`python -m pytest` runs 152 hermetic tests: fake/hashing embedder, scripted LLM, synthetic patient data (tests only, never used for reported metrics), no network.
-Covers validation edge cases, leakage alarm, artifact version/checksum checks, chunking invariants, ingest errors, index corruption,
+`python -m pytest` runs 219 hermetic tests: fake/hashing embedder, scripted LLM, synthetic patient data (tests only, never used for reported metrics), no network.
+Covers validation edge cases, the leakage gate (duplicates, target proxy, label shuffle, warn-vs-abort), the Kaggle adapter and run comparison, Gemini deadline/retry behaviour, grouped citations, UTF-16 input, artifact version/checksum checks, chunking invariants, ingest errors, index corruption,
 citation stripping, prompt injection (question and poisoned document), emergency gate, degradation (model missing / index missing / LLM down),
 privacy of logs, CLI and a Streamlit smoke test. `eval` (real embedder, optional real LLM) is run on demand.
 

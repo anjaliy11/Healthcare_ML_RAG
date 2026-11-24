@@ -11,3 +11,4 @@ artifacts/
 data/raw/heart_cleveland.csv
 build/
 dist/
+data/raw/kaggle_heart_failure.csv

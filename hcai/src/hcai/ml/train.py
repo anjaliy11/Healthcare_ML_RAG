@@ -28,7 +28,7 @@ from sklearn.model_selection import (
 from hcai.config import Config
 from hcai.errors import LeakageSuspectedError
 from hcai.logging import get_logger, log_event
-from hcai.ml.data import load_dataset
+from hcai.ml.datasets import DEFAULT_DATASET, load_named
 from hcai.ml.evaluate import (
     choose_recall_threshold,
     explain_selection,
@@ -37,8 +37,10 @@ from hcai.ml.evaluate import (
     save_plots,
     select_model,
 )
-from hcai.ml.features import build_pipeline, build_voting
+from hcai.ml.features import FeatureSpec, build_pipeline, build_voting
+from hcai.ml.leakage import judge, run_diagnostics
 from hcai.ml.registry import save_artifact
+from hcai.ml.runs import archive_run, summarise
 from hcai.ml.schema import BINARY, CATEGORICAL, FEATURES, NUMERIC
 
 log = get_logger("ml.train")
@@ -49,6 +51,7 @@ class TrainResult:
     selected: str
     metadata: dict[str, Any]
     report: dict[str, Any]
+    run_id: str = ""
 
 
 def _git_sha() -> str:
@@ -62,20 +65,29 @@ def _git_sha() -> str:
 
 
 def training_ranges(x: pd.DataFrame) -> dict[str, dict[str, float]]:
-    return {c: {"min": float(x[c].min()), "max": float(x[c].max())} for c in FEATURES}
+    """Observed range per feature that the dataset provides (absent features are skipped)."""
+    return {
+        c: {"min": float(x[c].min()), "max": float(x[c].max())}
+        for c in FEATURES
+        if x[c].notna().any()
+    }
 
 
 def reference_values(x: pd.DataFrame) -> dict[str, float]:
     """Typical value per feature (median / mode), used for per-patient factor attribution."""
     ref: dict[str, float] = {}
     for c in NUMERIC:
-        ref[c] = float(x[c].median())
+        if x[c].notna().any():
+            ref[c] = float(x[c].median())
     for c in BINARY + CATEGORICAL:
-        ref[c] = float(x[c].mode(dropna=True).iloc[0])
+        if x[c].notna().any():
+            ref[c] = float(x[c].mode(dropna=True).iloc[0])
     return ref
 
 
-def _nested_cv(name: str, x: pd.DataFrame, y: pd.Series, cfg: Config) -> dict[str, float] | None:
+def _nested_cv(
+    name: str, x: pd.DataFrame, y: pd.Series, cfg: Config, spec: FeatureSpec
+) -> dict[str, float] | None:
     """Unbiased CV estimate for 'tune the winner, then score it' (grid search inside each fold)."""
     if not cfg.ml.nested_cv or name == "voting":
         return None
@@ -84,22 +96,24 @@ def _nested_cv(name: str, x: pd.DataFrame, y: pd.Series, cfg: Config) -> dict[st
     outer = RepeatedStratifiedKFold(
         n_splits=cfg.ml.cv_splits, n_repeats=cfg.ml.cv_repeats, random_state=cfg.seed + 1
     )
-    gs = GridSearchCV(build_pipeline(name, cfg), grid, scoring="roc_auc", cv=inner)
+    gs = GridSearchCV(build_pipeline(name, cfg, spec=spec), grid, scoring="roc_auc", cv=inner)
     s = cross_val_score(gs, x, y, cv=outer, scoring="roc_auc")
     return {"mean": float(s.mean()), "std": float(s.std())}
 
 
-def _ablations(x: pd.DataFrame, y: pd.Series, cfg: Config, cv: Any) -> dict[str, float]:
+def _ablations(
+    x: pd.DataFrame, y: pd.Series, cfg: Config, cv: Any, spec: FeatureSpec
+) -> dict[str, float]:
     """CV-only comparison on the training split: does the missing-indicator / imputer matter?"""
 
     def score(pipe: Any) -> float:
         return float(cross_val_score(pipe, x, y, cv=cv, scoring="roc_auc").mean())
 
     return {
-        "logreg_with_indicator": score(build_pipeline("logreg", cfg, True)),
-        "logreg_without_indicator": score(build_pipeline("logreg", cfg, False)),
-        "hist_gb_imputed": score(build_pipeline("hist_gb", cfg)),
-        "hist_gb_native_nan": score(build_pipeline("hist_gb_native_nan", cfg)),
+        "logreg_with_indicator": score(build_pipeline("logreg", cfg, True, spec)),
+        "logreg_without_indicator": score(build_pipeline("logreg", cfg, False, spec)),
+        "hist_gb_imputed": score(build_pipeline("hist_gb", cfg, spec=spec)),
+        "hist_gb_native_nan": score(build_pipeline("hist_gb_native_nan", cfg, spec=spec)),
     }
 
 
@@ -107,8 +121,10 @@ def train(
     cfg: Config,
     source_file: Path | None = None,
     data: tuple[pd.DataFrame, pd.Series, str] | None = None,
+    dataset: str = DEFAULT_DATASET,
+    tag: str = "",
 ) -> TrainResult:
-    x, y, data_sha = data if data is not None else load_dataset(cfg, source_file)
+    x, y, data_sha = data if data is not None else load_named(cfg, dataset, source_file)
     seed = cfg.seed
     x_tr, x_te, y_tr, y_te = train_test_split(
         x, y, test_size=cfg.ml.test_size, stratify=y, random_state=seed
@@ -116,12 +132,15 @@ def train(
     cv = RepeatedStratifiedKFold(
         n_splits=cfg.ml.cv_splits, n_repeats=cfg.ml.cv_repeats, random_state=seed
     )
+    spec = FeatureSpec.from_data(x_tr)  # structure only (which columns exist / have NaN)
 
     fitted: dict[str, Any] = {}
     cv_summary: dict[str, dict[str, Any]] = {}
     for name in (n for n in cfg.ml.candidates if n != "voting"):
         grid = {f"model__{k}": v for k, v in cfg.ml.grids.get(name, {}).items()}
-        gs = GridSearchCV(build_pipeline(name, cfg), grid, scoring="roc_auc", cv=cv, refit=True)
+        gs = GridSearchCV(
+            build_pipeline(name, cfg, spec=spec), grid, scoring="roc_auc", cv=cv, refit=True
+        )
         gs.fit(x_tr, y_tr)
         i = int(gs.best_index_)
         fitted[name] = gs.best_estimator_
@@ -207,30 +226,41 @@ def train(
         },
         "calibration": calibration,
         "auc_diff_vs_baseline": diffs,
-        "nested_cv_auc": _nested_cv(selected, x_tr, y_tr, cfg),
-        "ablations_cv_auc": _ablations(x_tr, y_tr, cfg, cv),
+        "nested_cv_auc": _nested_cv(selected, x_tr, y_tr, cfg, spec),
+        "ablations_cv_auc": _ablations(x_tr, y_tr, cfg, cv, spec),
         "permutation_importance_test": importance,
         "explanation": explain_selection(
             selected, cv_summary, test_reports, cfg.ml.selection_margin, diffs
         ),
     }
 
-    # Sanity gate: write evidence first, then refuse to ship a suspicious model.
-    best_auc = max(r["metrics"]["roc_auc"] for r in test_reports.values())
-    report["sanity"] = {
-        "max_test_auc": best_auc,
-        "ceiling": cfg.ml.auc_ceiling,
-        "floor": cfg.ml.auc_floor,
-        "ceiling_ok": best_auc <= cfg.ml.auc_ceiling,
-        "floor_ok": test_reports[selected]["metrics"]["roc_auc"] >= cfg.ml.auc_floor,
-    }
+    # Leakage gate: direct diagnostics decide; the AUC level alone only warns (see leakage.py).
+    sel_auc = test_reports[selected]["metrics"]["roc_auc"]
+    max_auc = max(r["metrics"]["roc_auc"] for r in test_reports.values())
+    sel_ci = test_reports[selected]["ci95"]["roc_auc"]
+    diag = run_diagnostics(x_tr, x_te, y_tr, y_te, cfg, spec)
+    report["leakage"] = diag
+    report["dataset"] = {"name": dataset, "absent_features": list(spec.absent), "rows": len(x)}
+    report["sanity"] = judge(diag, sel_auc, max_auc, (sel_ci[0], sel_ci[1]), cfg)
+    verdict = report["sanity"]["verdict"]
     _write_reports(cfg, report, y_te_arr, test_proba, selected)
-    if not report["sanity"]["ceiling_ok"]:
+
+    def archive(status: str) -> str:
+        summary = summarise(
+            report, dataset=dataset, tag=tag, status=status, seed=seed, data_sha=data_sha,
+            absent=list(spec.absent), git_sha=_git_sha(),
+        )  # fmt: skip
+        files = [cfg.paths.reports_dir / "metrics.json", cfg.paths.reports_dir / "model_report.md"]
+        return archive_run(cfg, summary, files)
+
+    if verdict == "fail":
+        run_id = archive("aborted")
         raise LeakageSuspectedError(
-            f"Test ROC-AUC {best_auc:.3f} exceeds the {cfg.ml.auc_ceiling} sanity ceiling "
-            "(Cleveland is typically 0.88-0.93). Suspect leakage; model NOT saved. "
-            f"See {cfg.paths.reports_dir / 'metrics.json'}."
-        )
+            "Model NOT saved: " + "; ".join(report["sanity"]["reasons"])
+            + f". Evidence: {cfg.paths.reports_dir / 'metrics.json'} (run {run_id})."
+        )  # fmt: skip
+    if verdict == "warn":
+        log_event(log, "auc_above_ceiling_but_clean", selected_auc=round(sel_auc, 4))
 
     metadata = {
         "model_name": selected,
@@ -242,6 +272,9 @@ def train(
         "threshold_recall": recall_threshold,
         "band_low": cfg.ml.band_low,
         "band_high": cfg.ml.band_high,
+        "dataset": dataset,
+        "absent_features": list(spec.absent),
+        "indicator_cols": list(spec.indicator),
         "ranges": training_ranges(x_tr),
         "reference": reference_values(x_tr),
         "metrics_test": test_reports[selected],
@@ -252,7 +285,24 @@ def train(
     cfg.paths.reference.parent.mkdir(parents=True, exist_ok=True)
     x_tr.to_csv(cfg.paths.reference, index=False)  # public data; used for drift checks
     log_event(log, "model_saved", model=selected, version=metadata["model_version"])
-    return TrainResult(selected=selected, metadata=metadata, report=report)
+    run_id = archive("ok")
+    return TrainResult(selected=selected, metadata=metadata, report=report, run_id=run_id)
+
+
+def _leak_md(report: dict[str, Any]) -> str:
+    s, lk = report["sanity"], report["leakage"]
+    sf = lk["single_feature_auc_max"]
+    lines = [
+        f"- selected-model test ROC-AUC {s['selected_test_auc']:.3f}; best candidate "
+        f"{s['max_test_auc']:.3f}; warn level {s['ceiling']}, hard limit {s['abort_limit']}",
+        f"- train/test duplicate rows: {lk['duplicates']['n_overlap']} "
+        f"({lk['duplicates']['fraction']:.1%} of test)",
+        f"- strongest single feature: `{sf['feature']}` alone AUC {sf['auc']:.3f}",
+        f"- label-shuffle test AUC (expect ~0.5): mean {lk['label_shuffle']['mean']:.3f}, "
+        f"max {lk['label_shuffle']['max']:.3f} over {lk['label_shuffle']['repeats']} shuffles",
+    ]
+    lines += [f"- {r}" for r in s["reasons"]]
+    return "\n".join(lines)
 
 
 def _cal(report: dict[str, Any]) -> str:
@@ -302,6 +352,7 @@ def _write_reports(
     rec = report["selected_at_recall_threshold"]
     md = f"""# Model report (generated by `python -m hcai train`; do not edit by hand)
 
+dataset `{report["dataset"]["name"]}` ({report["dataset"]["rows"]} rows; absent features: {", ".join(report["dataset"]["absent_features"]) or "none"})
 sklearn {sklearn.__version__} · seed {cfg.seed} · train n={report["n_train"]} · test n={report["n_test"]}
 · positive rate {report["class_balance_positive"]:.2f}
 
@@ -331,8 +382,8 @@ calibration applied to the saved model: **{report["calibration"]["applied"]}**.
 ## Ablations (CV ROC-AUC on train split, default hyper-parameters)
 {json.dumps(report["ablations_cv_auc"], indent=2)}
 
-## Sanity
-{json.dumps(report["sanity"], indent=2)}
+## Sanity and leakage checks: **{report["sanity"]["verdict"].upper()}**
+{_leak_md(report)}
 
 ## Permutation importance (test, ROC-AUC drop)
 """ + "\n".join(

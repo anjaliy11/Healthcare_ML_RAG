@@ -28,6 +28,7 @@ class RiskResult(BaseModel):
     top_factors: list[Factor]
     range_flags: list[str]  # features outside the training range (the model extrapolates)
     imputed_fields: list[str]
+    ignored_fields: list[str] = []  # given by the user but unused: this model's data lacks them
     model_version: str
     disclaimer: str = DISCLAIMER
 
@@ -43,6 +44,14 @@ class RiskPredictor:
         pipeline, meta = load_artifact(cfg)
         return cls(pipeline, meta, cfg.ml.top_factors)
 
+    @property
+    def absent(self) -> list[str]:
+        return list(self.meta.get("absent_features", []))
+
+    @property
+    def used(self) -> list[str]:
+        return [f for f in FEATURES if f not in self.absent]
+
     def band(self, p: float) -> str:
         if p < self.meta["band_low"]:
             return "low"
@@ -51,7 +60,7 @@ class RiskPredictor:
     def _factors(self, row: pd.DataFrame, base: float) -> list[Factor]:
         """Model-agnostic occlusion: set one known feature at a time to its typical value."""
         ref = self.meta["reference"]
-        known = [f for f in FEATURES if not np.isnan(row.iloc[0][f])]
+        known = [f for f in self.used if not np.isnan(row.iloc[0][f])]
         variants = []
         for f in known:
             v = row.copy()
@@ -80,7 +89,7 @@ class RiskPredictor:
             row = frame.iloc[[i]].reset_index(drop=True)
             flags = [
                 f
-                for f in FEATURES
+                for f in self.used
                 if not np.isnan(row.iloc[0][f])
                 and not (
                     self.meta["ranges"][f]["min"] <= row.iloc[0][f] <= self.meta["ranges"][f]["max"]
@@ -92,7 +101,8 @@ class RiskPredictor:
                     band=self.band(float(p)),
                     top_factors=self._factors(row, float(p)),
                     range_flags=flags,
-                    imputed_fields=[f for f in FEATURES if np.isnan(row.iloc[0][f])],
+                    imputed_fields=[f for f in self.used if np.isnan(row.iloc[0][f])],
+                    ignored_fields=[f for f in self.absent if not np.isnan(row.iloc[0][f])],
                     model_version=self.meta["model_version"],
                 )
             )

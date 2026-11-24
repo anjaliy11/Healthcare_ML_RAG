@@ -17,7 +17,7 @@ EMERGENCY_MESSAGE = (
 )
 
 _RED_FLAGS = [
-    r"chest (pain|pressure|tightness|discomfort)|pain in (my |the )?chest|tight(ness)? in (my |the )?chest",
+    r"chest (pain|pressure|tightness|discomfort|hurts?|aches?|aching)|pain in (my |the )?chest|tight(ness)? in (my |the )?chest|(hurts?|aches?) in (my |the )?chest|my chest",
     r"heart attack|cardiac arrest",
     r"(can'?t|cannot|unable to|trouble|difficulty) breath|short(ness)? of breath|struggling to breathe",
     r"faint(ed|ing)?|pass(ed|ing) out|lost consciousness|collaps(e|ed|ing)",
@@ -27,13 +27,19 @@ _RED_FLAGS = [
 ]  # fmt: skip
 _RED_FLAG_RE = re.compile("|".join(f"(?:{p})" for p in _RED_FLAGS), re.I)
 
-_INFORMATIONAL_RE = re.compile(
-    r"^\s*(what|which|why|how|when|who|can you explain|explain|define|list|tell me about|are|is)\b",
+# A question is "informational" when it is asked in general terms: it is phrased as a question
+# (starts with a question word / auxiliary, or ends with "?") AND nothing ties it to a person or
+# to the present moment. Anything else that mentions a red flag is treated as possibly happening.
+_QUESTION_START_RE = re.compile(
+    r"^\s*(what|which|why|how|when|who|where|can|could|does|do|did|should|would|will|might|may|"
+    r"are|is|was|were|explain|define|list|describe|tell me about|can you explain)\b",
     re.I,
 )
 _PERSONAL_RE = re.compile(
-    r"\b(i|i'm|im|i've|ive|my|me|we|he|she|they|someone|dad|mom|mother|father|wife|husband|"
-    r"friend|patient|right now|currently|having|just)\b",
+    r"\b(i|i'm|im|i've|ive|i'd|my|mine|we|our|he|she|they|his|her|their|someone|somebody|"
+    r"dad|mom|mum|mother|father|wife|husband|friend|patient|son|daughter|grandma|grandpa|"
+    r"this|these|that's|right now|now|currently|today|tonight|just|suddenly|started|having|has|"
+    r"feel|feels|feeling|felt|am|been)\b",
     re.I,
 )
 
@@ -45,9 +51,13 @@ class SafetyAlert:
 
 
 def check_emergency(question: str) -> SafetyAlert | None:
-    """Return an alert if the text describes a possible emergency happening to someone."""
+    """Return an alert if the text describes a possible emergency happening to someone.
+
+    Fails towards alerting: a false alarm costs a click, a missed emergency costs more."""
     m = _RED_FLAG_RE.search(question)
     if not m:
         return None
-    informational = bool(_INFORMATIONAL_RE.match(question)) and not _PERSONAL_RE.search(question)
-    return None if informational else SafetyAlert(matched=m.group(0).lower())
+    asked_in_general = (
+        bool(_QUESTION_START_RE.match(question)) or question.rstrip().endswith("?")
+    ) and not _PERSONAL_RE.search(question)
+    return None if asked_in_general else SafetyAlert(matched=m.group(0).lower())

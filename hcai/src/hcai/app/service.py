@@ -144,6 +144,12 @@ class Services:
                 "Some values fall outside the range of the training data, so the estimate is "
                 "an extrapolation: " + ", ".join(risk.range_flags) + "."
             )
+        if risk.ignored_fields:
+            result.notes.append(
+                "This model was trained on a dataset without: "
+                + ", ".join(risk.ignored_fields)
+                + ". Those values were ignored."
+            )
         if risk.imputed_fields:
             result.notes.append(
                 "Not provided and filled with typical training values: "

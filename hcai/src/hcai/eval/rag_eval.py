@@ -12,13 +12,13 @@ import numpy as np
 
 from hcai.config import RagConfig
 from hcai.rag.embeddings import Embedder, tokenize
+from hcai.rag.generator import _GROUP_RE
 from hcai.rag.pipeline import Answer, RagPipeline
 from hcai.rag.rerank import Reranker
 from hcai.rag.retriever import Retriever
 from hcai.rag.store import VectorStore
 
 GOLDEN_PATH = Path(__file__).with_name("golden.jsonl")
-_CITE = __import__("re").compile(r"\[C\d+\]")
 
 
 @dataclass(frozen=True)
@@ -50,7 +50,7 @@ def faithfulness_proxy(answer: str, cited_texts: list[str], min_overlap: float =
     """Share of answer sentences whose content words mostly appear in the cited passages.
     A cheap lexical proxy, NOT an entailment check; confirm with human spot checks."""
     source = set(tokenize(" ".join(cited_texts)))
-    sents = [s.strip(" -•") for s in _CITE.sub("", answer).replace("\n", ". ").split(".")]
+    sents = [s.strip(" -•") for s in _GROUP_RE.sub("", answer).replace("\n", ". ").split(".")]
     sents = [s for s in sents if len(s.split()) >= 4]
     if not sents:
         return 1.0
@@ -77,14 +77,33 @@ def threshold_sweep(
     return rows
 
 
-def recommend_threshold(sweep: list[dict[str, float]]) -> float | None:
-    """Maximise (1 - FRR) + (1 - FAR); ties go to the higher (safer) threshold."""
+def recommend_threshold(
+    sweep: list[dict[str, float]], max_frr: float | None = 0.05
+) -> float | None:
+    """Pick the operating threshold.
+
+    With `max_frr`, keep false refusals of answerable questions at or below that rate and then
+    minimise false answers (ties -> higher threshold). A plain "maximise 1-FRR + 1-FAR" pick can
+    sit where 10% of good questions are refused, which is a poor trade for a QA tool. If no
+    threshold meets the cap (or max_frr is None) fall back to the unconstrained optimum."""
     if not sweep:
         return None
+    if max_frr is not None:
+        ok = [r for r in sweep if r["false_refusal_rate"] <= max_frr]
+        if ok:
+            return min(ok, key=lambda r: (r["false_answer_rate"], -r["threshold"]))["threshold"]
     best = max(
         sweep, key=lambda r: (2 - r["false_refusal_rate"] - r["false_answer_rate"], r["threshold"])
     )
     return best["threshold"]
+
+
+def rates_at(sweep_scores: tuple[list[float], list[float]], thr: float) -> tuple[float, float]:
+    """(false-refusal, false-answer) rate at one threshold."""
+    ans, ref = sweep_scores
+    frr = float(np.mean([s < thr for s in ans])) if ans else 0.0
+    far = float(np.mean([s >= thr for s in ref])) if ref else 0.0
+    return frr, far
 
 
 def run_ablation(
@@ -135,6 +154,17 @@ def run_ablation(
             }
         )
     return rows
+
+
+def _behaved(expect: str, mode: str) -> bool:
+    """Did the system do what the golden item expects (answer / refuse / emergency alert)?"""
+    if expect == "answer":
+        return mode in {"llm", "extractive"}
+    if expect == "refuse":
+        return mode == "refusal"
+    if expect == "emergency":
+        return mode == "emergency"
+    return True
 
 
 def _chunk_texts(pipe: RagPipeline) -> dict[str, str]:
@@ -229,7 +259,24 @@ def run_eval(pipe: RagPipeline, items: list[GoldenItem]) -> dict[str, Any]:
         else {},
     }
 
-    sweep = threshold_sweep([r["top1"] for r in should_answer], [r["top1"] for r in should_refuse])
+    ans_scores = [r["top1"] for r in should_answer]
+    ref_scores = [r["top1"] for r in should_refuse]
+    sweep = threshold_sweep(ans_scores, ref_scores)
+    behaviour_failures = [
+        {
+            "id": r["item"].id,
+            "question": r["item"].question,
+            "expected": r["item"].expect,
+            "got": r["answer"].mode,
+            "top_score": round(r["top1"], 3),
+            "warnings": list(r["answer"].warnings),
+        }
+        for r in rows
+        if not _behaved(r["item"].expect, r["answer"].mode)
+    ]
+    frr_now, far_now = rates_at((ans_scores, ref_scores), pipe.retriever.threshold)
+    rec = recommend_threshold(sweep)
+    rec_frr, rec_far = rates_at((ans_scores, ref_scores), rec) if rec is not None else (0.0, 0.0)
     worst = sorted(
         (r for r in with_docs if r["rank"] is None or r["rank"] > 1),
         key=lambda r: (r["rank"] is not None, -(r["rank"] or 0), r["top1"]),
@@ -242,7 +289,10 @@ def run_eval(pipe: RagPipeline, items: list[GoldenItem]) -> dict[str, Any]:
         "safety": safety,
         "generation": generation,
         "threshold_sweep": sweep,
-        "recommended_threshold": recommend_threshold(sweep),
+        "recommended_threshold": rec,
+        "recommended_rates": {"false_refusal_rate": rec_frr, "false_answer_rate": rec_far},
+        "current_rates": {"false_refusal_rate": frr_now, "false_answer_rate": far_now},
+        "behaviour_failures": behaviour_failures,
         "failures_for_analysis": [
             {
                 "id": r["item"].id,
@@ -317,7 +367,8 @@ answered {g["answered"]} (LLM {g["llm_answers"]}, extractive {g["extractive_answ
 · invalid-citation events {g["invalid_citation_events"]} · LLM fallbacks {g["llm_fallbacks"]} · latency {g["latency_ms"]}
 
 ## Threshold trade-off (top-1 retrieval score; answerable vs. out-of-scope questions)
-Recommended threshold (maximises 1-FRR + 1-FAR): **{pct(result["recommended_threshold"])}** — set `rag.score_threshold` in `configs/default.yaml`.
+Threshold in use {result["threshold_used"]:.3f}: false refusal {result["current_rates"]["false_refusal_rate"]:.2f}, false answer {result["current_rates"]["false_answer_rate"]:.2f}.
+Suggested (lowest false-answer rate with false refusal <= 5%): **{pct(result["recommended_threshold"])}** → false refusal {result["recommended_rates"]["false_refusal_rate"]:.2f}, false answer {result["recommended_rates"]["false_answer_rate"]:.2f}. Change `rag.score_threshold` only if you accept that trade; with ~20 answerable and ~6 unanswerable items a single question moves a rate by 5% / 17%.
 
 | threshold | false refusal | false answer |
 |---|---|---|
@@ -329,13 +380,29 @@ Recommended threshold (maximises 1-FRR + 1-FAR): **{pct(result["recommended_thre
         + ablation_markdown(ablation)
         + """
 
-## Failures to analyse (write your own paragraph: what failed, why, what you would fix)
+## Behaviour failures (answered when it should refuse, refused/alerted when it should answer, ...)
 """
-        + "\n".join(
-            f'- {x["id"]} "{x["question"]}" expected {x["expected"]}, first expected hit at rank '
-            f"{x['rank_of_expected']}, retrieved {x['retrieved_docs']}, top score {x['top_score']}"
-            for x in result["failures_for_analysis"]
+        + (
+            "\n".join(
+                f'- {x["id"]} "{x["question"]}" expected {x["expected"]}, got {x["got"]}, '
+                f"top score {x['top_score']}, notes {x['warnings']}"
+                for x in result["behaviour_failures"]
+            )
+            or "none on this run"
         )
+        + """
+
+## Retrieval failures (expected document not ranked first)
+"""
+        + (
+            "\n".join(
+                f'- {x["id"]} "{x["question"]}" expected {x["expected"]}, first expected hit at rank '
+                f"{x['rank_of_expected']}, retrieved {x['retrieved_docs']}, top score {x['top_score']}"
+                for x in result["failures_for_analysis"]
+            )
+            or "none on this run"
+        )
+        + "\n\nWrite your own paragraph: what failed, why, what you would fix.\n"
     )
     out = reports_dir / "rag_eval.md"
     out.write_text(md + "\n", encoding="utf-8")

@@ -51,6 +51,12 @@ class MLConfig(_Strict):
     calibration_margin: float | None
     nested_cv: bool
     grids: dict[str, dict[str, list[float | int | None]]]
+    auc_abort: float = 0.99  # test AUC above this is implausible for these datasets: stop
+    leak_single_feature_max: float = 0.98  # one feature alone this predictive = target proxy
+    leak_shuffle_max: float = 0.65  # label-shuffle test AUC must stay near 0.5
+    leak_shuffle_repeats: int = 5
+    leak_duplicate_frac_max: float = 0.05  # share of test rows also present in train
+    stability_splits: int = 100
 
 
 class RagConfig(_Strict):
@@ -81,6 +87,9 @@ class LLMConfig(_Strict):
     timeout_s: float
     max_retries: int
     backoff_s: float
+    deadline_s: float = 25.0
+    max_wait_s: float = 8.0
+    min_interval_s: float = 0.0
 
 
 class Config(_Strict):
