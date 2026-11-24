@@ -1,0 +1,36 @@
+{
+  "a": "20261124-072319_cleveland_build03",
+  "b": "20261124-073615_kaggle_heart_failure_kaggle",
+  "same_dataset": false,
+  "same_data": false,
+  "selected": {
+    "a": "logreg",
+    "b": "logreg"
+  },
+  "delta_selected_b_minus_a": {
+    "roc_auc": -0.025481811349817196,
+    "accuracy": 0.016928011404134025,
+    "precision": 0.057516737674984775,
+    "recall": 0.0028011204481792618,
+    "f1": 0.03210560625814862
+  },
+  "ci_overlap": true,
+  "shared_models": [
+    "hist_gb",
+    "logreg",
+    "logreg_fe",
+    "random_forest",
+    "svm_rbf",
+    "voting"
+  ],
+  "best_cv_model": {
+    "20261124-072319_cleveland_build03": "voting",
+    "20261124-073615_kaggle_heart_failure_kaggle": "voting"
+  },
+  "notes": [
+    "Different datasets: populations, feature sets and test sets differ, so absolute numbers are not directly comparable. Compare the pattern (model ranking, CI width, calibration), not the decimals.",
+    "Feature sets differ (absent in A: none; absent in B: ['ca', 'thal']).",
+    "The Kaggle Heart Failure data includes Cleveland-derived rows, so the two results are not fully independent confirmations.",
+    "The 95% CIs of the selected models' ROC-AUC overlap: the difference is not statistically distinguishable at these test-set sizes."
+  ]
+}

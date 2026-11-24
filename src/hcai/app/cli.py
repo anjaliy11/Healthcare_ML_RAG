@@ -135,6 +135,15 @@ def cmd_runs(cfg: Config, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_report(cfg: Config, args: argparse.Namespace) -> int:
+    from hcai.report import publish
+
+    readme, copied = publish(cfg, args.readme)
+    _out(f"updated results block in {readme}")
+    _out(f"copied {len(copied)} report files to {readme.parent / 'docs' / 'results'}")
+    return 0
+
+
 def cmd_compare(cfg: Config, args: argparse.Namespace) -> int:
     from hcai.ml.runs import resolve_run, write_comparison
 
@@ -296,6 +305,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="record this machine's cached dataset hash for the imported run (you assert it used the same file)",
     )
     p.add_argument("--source-file", type=Path)
+    p = sub.add_parser("report", help="write measured results into README.md and docs/results/")
+    p.add_argument("--readme", type=Path, help="default: README.md in the project root")
     p = sub.add_parser("compare", help="compare two archived runs (A = baseline, B = candidate)")
     p.add_argument("run_a")
     p.add_argument("run_b")
@@ -326,7 +337,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 COMMANDS = {
     "data": cmd_data, "train": cmd_train, "stability": cmd_stability, "runs": cmd_runs,
-    "compare": cmd_compare, "index": cmd_index, "ask": cmd_ask,
+    "compare": cmd_compare, "report": cmd_report, "index": cmd_index, "ask": cmd_ask,
     "assess": cmd_assess, "eval": cmd_eval, "monitor": cmd_monitor, "status": cmd_status,
 }  # fmt: skip
 

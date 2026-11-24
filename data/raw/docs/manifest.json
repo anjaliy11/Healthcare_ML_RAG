@@ -1,6 +1,24 @@
 {
   "documents": [
     {
+      "doc_id": "cdc-hbp-about",
+      "title": "NHLBI: What is high blood pressure?",
+      "url": "https://www.nhlbi.nih.gov/health/high-blood-pressure",
+      "license": "US government work, generally public domain (verify on page)",
+      "retrieved_at": "2026-11-24",
+      "sha256": "e6a69e0d42bd6f5b0b20754a3766f0ea39095a7953a40ad2ed2a24289b3ca57e",
+      "file": "cdc-hbp-about.txt"
+    },
+    {
+      "doc_id": "cdc-hbp-risk-factors",
+      "title": "NHLBI: High blood pressure causes and risk factors",
+      "url": "https://www.nhlbi.nih.gov/health/high-blood-pressure/causes",
+      "license": "US government work, generally public domain (verify on page)",
+      "retrieved_at": "2026-11-24",
+      "sha256": "adfbebd966d9835e04bdcd08a429013d73afcc5faa3e960fc5905a7b6e3c16c7",
+      "file": "cdc-hbp-risk-factors.txt"
+    },
+    {
       "doc_id": "niddk-diabetes-symptoms",
       "title": "NIDDK: Symptoms & causes of diabetes",
       "url": "https://www.niddk.nih.gov/health-information/diabetes/overview/symptoms-causes",
