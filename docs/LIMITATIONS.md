@@ -51,3 +51,20 @@ decisions about anyone's care.
 3. Clinician-reviewed golden set; LLM-as-judge faithfulness with human spot checks.
 4. Multilingual retrieval; richer safety triage than keywords.
 5. Docker, CI release of the index, auth + audit logging, proper observability.
+
+## Summary table
+| Area | Limitation | Consequence | Mitigation now / next step |
+|---|---|---|---|
+| Data | 303 patients, one 1980s hospital; 61-row test set | CIs about ±0.05 AUC; one split can mislead (test 0.961 vs nested-CV 0.896) | Report CIs, nested CV and a 100-split study; next: validate on the other UCI sites |
+| Data | Kaggle comparison file is partly Cleveland-derived, different features | Not an external validation, numbers not comparable | Labelled as a comparison only |
+| Model | Probabilities not clinically calibrated; bands are demo cut-points | Risk % must not be read as a clinical probability | Sigmoid calibration only if Brier improves; next: calibrate on more data |
+| Model | Needs `ca`, `thal`, `oldpeak`, `restecg`, `thalach` (clinical tests) | A lay user cannot fill all fields | UI marks them; missing values are imputed and flagged |
+| Model | Sex imbalance (about 68% male) | Less certain for women | Disclosed in MODEL_CARD |
+| Model | Factor explanations are one-at-a-time occlusion | Not causal, ignores interactions | Worded as "raises the estimate" |
+| RAG | 9 general-population English fact sheets | No pregnancy, dosing or individual guidance; U04 still answered | Next: population-aware refusal rule |
+| RAG | Typo robustness (X03 refused) | Misspelt questions may be wrongly refused | Next: query normalisation, then re-evaluate |
+| RAG | Golden set (30) written by the author; faithfulness is lexical | Metrics are indicative, not clinical-grade | Next: clinician-reviewed set, entailment-based check |
+| RAG | Keyword emergency gate | Can miss new phrasings | Tested on a short list only; next: richer triage |
+| RAG | Retrieval choice decided on n = 21 | Dense vs hybrid may differ on a larger corpus | Ablation reruns with `eval` |
+| RAG | Free-tier Gemini: rate limits, prompts may be used by Google | Variable latency; no real patient data | Extractive fallback; only question + passages are sent |
+| Ops | No auth, audit log, Docker or hosted index; snapshots go stale | Demo only | Out of scope by design |

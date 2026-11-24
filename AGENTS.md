@@ -30,7 +30,7 @@ It is a **demonstration prototype, not a medical device**. Never phrase output a
 ## Layout
 ```
 src/hcai/
-  config.py logging.py errors.py textio.py
+  config.py logging.py errors.py textio.py report.py
   ml/   data.py datasets.py schema.py features.py train.py evaluate.py leakage.py runs.py predict.py registry.py
   rag/  ingest.py chunking.py embeddings.py store.py retriever.py prompts.py
         generator.py safety.py pipeline.py
@@ -39,12 +39,12 @@ src/hcai/
   eval/ rag_eval.py golden.jsonl
 tests/  unit/ integration/ fixtures/
 scripts/ fetch_docs.py
-docs/   DESIGN.md MODEL_CARD.md LIMITATIONS.md
+docs/   DESIGN.md ARCHITECTURE.md MODEL_CARD.md LIMITATIONS.md BUILD_NOTES.md RUN_COMPARISON.md results/
 artifacts/ (gitignored: model.joblib, index/, reports/)
 ```
 
 ## Commands (Makefile)
-`make setup` · `make data` · `make train` · (`python -m hcai stability|runs|compare`) · `make index` · `make eval` · `make test` · `make lint` · `make app` · `make cli` · `make monitor` · `make all`
+`make setup` · `make data` · `make train` · (`python -m hcai stability|runs|compare|report`) · `make index` · `make eval` · `make test` · `make lint` · `make app` · `make cli` · `make monitor` · `make all`
 
 ## Conventions
 - Python 3.11, `src/` layout, full type hints, `ruff` + `ruff format` + `mypy`, `pytest` with `--cov`.

@@ -300,6 +300,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--tag", default="imported")
     p.add_argument("--build", help="label for the build that produced it, e.g. 0.2-gemini")
     p.add_argument(
+        "--allow-current-build",
+        action="store_true",
+        help="import even if the file was written by build 0.3+ (normally a mistake)",
+    )
+    p.add_argument(
         "--assume-same-data",
         action="store_true",
         help="record this machine's cached dataset hash for the imported run (you assert it used the same file)",

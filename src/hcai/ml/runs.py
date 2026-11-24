@@ -120,7 +120,13 @@ def archive_run(cfg: Config, summary: dict[str, Any], files: list[Path]) -> str:
 
 
 def import_legacy(
-    cfg: Config, metrics_json: Path, dataset: str, tag: str, build: str, data_sha: str = "unknown"
+    cfg: Config,
+    metrics_json: Path,
+    dataset: str,
+    tag: str,
+    build: str,
+    data_sha: str = "unknown",
+    allow_current_build: bool = False,
 ) -> str:
     """Archive a `metrics.json` produced by an earlier build (e.g. the build you already ran)."""
     if not metrics_json.is_file():
@@ -129,6 +135,15 @@ def import_legacy(
         report = json.loads(read_text(metrics_json))
         if not isinstance(report, dict) or not report.get("test") or not report.get("selected"):
             raise KeyError("no 'selected' / 'test' sections")
+        if not allow_current_build and (
+            "leakage" in report or isinstance(report.get("dataset"), dict)
+        ):
+            raise RunNotFoundError(
+                f"{metrics_json.name} was written by build 0.3 or later (it contains leakage "
+                "checks), not by an older build. Importing it as an older build would compare a "
+                "run with itself. Import the metrics.json saved BEFORE you trained with 0.3, or "
+                "pass --allow-current-build if you really mean it."
+            )
         stamp = datetime.fromtimestamp(metrics_json.stat().st_mtime, UTC).isoformat(
             timespec="seconds"
         )

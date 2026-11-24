@@ -153,6 +153,11 @@ def add_local_document(
     )
 
 
+def failed_ids(status: dict[str, str]) -> list[str]:
+    """Documents with no usable text. 'ok (alternate: ...)' is a success, not a failure."""
+    return [d for d, st in status.items() if st.startswith("FAILED")]
+
+
 def _download(url: str) -> str:
     import requests
 

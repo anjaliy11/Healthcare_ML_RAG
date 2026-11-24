@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from hcai.config import load_config
-from hcai.rag.fetch import add_local_document, fetch_all
+from hcai.rag.fetch import add_local_document, failed_ids, fetch_all
 
 
 def main() -> int:
@@ -38,7 +38,7 @@ def main() -> int:
     status = fetch_all(docs_dir, args.only)
     for doc_id, st in status.items():
         print(f"{doc_id:28s} {st}")
-    failed = [d for d, s in status.items() if s != "ok"]
+    failed = failed_ids(status)
     if failed:
         print(
             f"\n{len(failed)} failed. Save the page text by hand and use --add-local.",
