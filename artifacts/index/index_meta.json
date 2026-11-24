@@ -1,0 +1,18 @@
+{
+  "embedding_model": "BAAI/bge-small-en-v1.5",
+  "dim": 384,
+  "n_chunks": 110,
+  "doc_ids": [
+    "cdc-hbp-about",
+    "cdc-hbp-risk-factors",
+    "niddk-diabetes-symptoms",
+    "who-cvd",
+    "who-diabetes",
+    "who-healthy-diet",
+    "who-hypertension",
+    "who-physical-activity",
+    "who-tobacco"
+  ],
+  "built_at": "2026-11-24T07:46:15+00:00",
+  "index_sha256": "23e1ade1753640d6abf89645122f4c82faf10b5020bb2a483dbe523c5545d113"
+}

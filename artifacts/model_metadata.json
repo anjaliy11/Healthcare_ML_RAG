@@ -1,0 +1,164 @@
+{
+  "model_name": "logreg",
+  "trained_at": "2026-11-24T07:23:18+00:00",
+  "git_sha": "ab694df",
+  "seed": 42,
+  "data_sha256": "00c6e34ecd7e8c4fd6544b49410aab4764aff4289dd1846b6ec2e69d42a05777",
+  "threshold_default": 0.5,
+  "threshold_recall": 0.2965226373712223,
+  "band_low": 0.3,
+  "band_high": 0.6,
+  "dataset": "cleveland",
+  "absent_features": [],
+  "indicator_cols": [
+    "ca",
+    "thal"
+  ],
+  "ranges": {
+    "age": {
+      "min": 29.0,
+      "max": 77.0
+    },
+    "sex": {
+      "min": 0.0,
+      "max": 1.0
+    },
+    "cp": {
+      "min": 1.0,
+      "max": 4.0
+    },
+    "trestbps": {
+      "min": 94.0,
+      "max": 200.0
+    },
+    "chol": {
+      "min": 126.0,
+      "max": 564.0
+    },
+    "fbs": {
+      "min": 0.0,
+      "max": 1.0
+    },
+    "restecg": {
+      "min": 0.0,
+      "max": 2.0
+    },
+    "thalach": {
+      "min": 71.0,
+      "max": 202.0
+    },
+    "exang": {
+      "min": 0.0,
+      "max": 1.0
+    },
+    "oldpeak": {
+      "min": 0.0,
+      "max": 6.2
+    },
+    "slope": {
+      "min": 1.0,
+      "max": 3.0
+    },
+    "ca": {
+      "min": 0.0,
+      "max": 3.0
+    },
+    "thal": {
+      "min": 3.0,
+      "max": 7.0
+    }
+  },
+  "reference": {
+    "age": 56.0,
+    "trestbps": 130.0,
+    "chol": 244.5,
+    "thalach": 153.5,
+    "oldpeak": 0.8,
+    "ca": 0.0,
+    "sex": 1.0,
+    "fbs": 0.0,
+    "exang": 0.0,
+    "cp": 4.0,
+    "restecg": 0.0,
+    "slope": 1.0,
+    "thal": 3.0
+  },
+  "metrics_test": {
+    "threshold": 0.5,
+    "metrics": {
+      "accuracy": 0.8852459016393442,
+      "precision": 0.8387096774193549,
+      "recall": 0.9285714285714286,
+      "f1": 0.8813559322033898,
+      "roc_auc": 0.9610389610389611
+    },
+    "ci95": {
+      "accuracy": [
+        0.8032786885245902,
+        0.9672131147540983
+      ],
+      "precision": [
+        0.7096774193548387,
+        0.9642857142857143
+      ],
+      "recall": [
+        0.8213474025974026,
+        1.0
+      ],
+      "f1": [
+        0.7857142857142857,
+        0.9565523576240049
+      ],
+      "roc_auc": [
+        0.9020163971179417,
+        0.9978448275862069
+      ]
+    },
+    "brier": 0.08692628939632444,
+    "confusion": {
+      "tn": 28,
+      "fp": 5,
+      "fn": 2,
+      "tp": 26
+    },
+    "n": 61
+  },
+  "cv": {
+    "mean": 0.8994003580960104,
+    "std": 0.039535705265589444,
+    "best_params": {
+      "model__C": 0.1
+    }
+  },
+  "sanity": {
+    "verdict": "warn",
+    "reasons": [
+      "test ROC-AUC 0.969 is above the usual ceiling 0.96, but every direct leakage check is clean (selected-model 95% CI [0.90, 1.00]). With a small test set this is within split noise; run `python -m hcai stability` to measure how often that happens."
+    ],
+    "ceiling": 0.96,
+    "abort_limit": 0.99,
+    "floor": 0.8,
+    "max_test_auc": 0.9686147186147187,
+    "selected_test_auc": 0.9610389610389611,
+    "ceiling_ok": false,
+    "floor_ok": true
+  },
+  "sklearn_version": "1.9.1",
+  "features": [
+    "age",
+    "sex",
+    "cp",
+    "trestbps",
+    "chol",
+    "fbs",
+    "restecg",
+    "thalach",
+    "exang",
+    "oldpeak",
+    "slope",
+    "ca",
+    "thal"
+  ],
+  "model_sha256": "9668a7d7a7deb97dd1aeb75a7754ca1c8a260922955b7263210286fba960c1da",
+  "model_version": "logreg-9668a7d7"
+}
