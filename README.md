@@ -13,7 +13,7 @@ Docs: [ARCHITECTURE](docs/ARCHITECTURE.md) · [DESIGN](docs/DESIGN.md) (decision
 
 
 ## Streamlit deployed app link
-- URL: https://healthcaremlrag-m8hv7oaamxr6hehkaawwvq.streamlit.app/
+- URL: https://healthcaremlrag-fsfgnwhxagbervs5x8bfz5.streamlit.app/
 
 
 
