@@ -130,6 +130,21 @@ def _store(tmp_path: Path):
     return emb, store, chunks
 
 
+def test_store_load_survives_crlf_conversion_but_not_tampering(tmp_path: Path):
+    """git autocrlf / Windows editors change line endings of chunks.json; that is not corruption."""
+    _, store, _ = _store(tmp_path)
+    idx = tmp_path / "idx"
+    store.save(idx)
+    chunks_file = idx / "chunks.json"
+    raw = chunks_file.read_bytes()
+    assert b"\r\n" not in raw  # written without platform newline translation
+    chunks_file.write_bytes(raw.replace(b"\n", b"\r\n"))
+    assert len(FaissStore.load(idx)) == len(store)
+    chunks_file.write_bytes(raw.replace(b"hypertension", b"hypotension", 1))
+    with pytest.raises(IndexCorruptError):
+        FaissStore.load(idx)
+
+
 def test_store_roundtrip_and_search(tmp_path: Path):
     emb, store, chunks = _store(tmp_path)
     store.save(tmp_path / "idx")

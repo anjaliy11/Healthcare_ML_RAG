@@ -1,0 +1,4 @@
+# Generated artifacts are hashed byte-for-byte: never let git rewrite their line endings.
+artifacts/** -text
+*.faiss binary
+*.joblib binary

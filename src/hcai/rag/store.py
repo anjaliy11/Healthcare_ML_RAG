@@ -26,10 +26,15 @@ class VectorStore(Protocol):
     def __len__(self) -> int: ...
 
 
-def _sha(*paths: Path) -> str:
+def _sha(index_file: Path, chunks_file: Path) -> str:
+    """Checksum of the index plus the chunk JSON with line endings normalised.
+
+    Git (autocrlf) and Windows text-mode writes change CRLF/LF in the JSON; that must not
+    look like corruption, so the text file is hashed with CRLF folded to LF.
+    """
     h = hashlib.sha256()
-    for p in paths:
-        h.update(p.read_bytes())
+    h.update(index_file.read_bytes())
+    h.update(chunks_file.read_bytes().replace(b"\r\n", b"\n"))
     return h.hexdigest()
 
 
@@ -64,8 +69,8 @@ class FaissStore:
     def save(self, directory: Path) -> None:
         directory.mkdir(parents=True, exist_ok=True)
         faiss.write_index(self.index, str(directory / INDEX_FILE))
-        (directory / CHUNKS_FILE).write_text(
-            json.dumps([c.to_dict() for c in self.chunks], indent=1), encoding="utf-8"
+        (directory / CHUNKS_FILE).write_bytes(  # bytes: no platform newline translation
+            json.dumps([c.to_dict() for c in self.chunks], indent=1).encode("utf-8")
         )
         meta = {
             "embedding_model": self.embedding_model,
@@ -75,7 +80,7 @@ class FaissStore:
             "built_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "index_sha256": _sha(directory / INDEX_FILE, directory / CHUNKS_FILE),
         }
-        (directory / META_FILE).write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        (directory / META_FILE).write_bytes(json.dumps(meta, indent=2).encode("utf-8"))
 
     @classmethod
     def load(cls, directory: Path) -> FaissStore:
