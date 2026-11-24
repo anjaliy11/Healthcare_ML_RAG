@@ -5,6 +5,7 @@ Run:  python -m streamlit run src/hcai/app/streamlit_app.py
 
 from __future__ import annotations
 
+import faulthandler
 import html
 
 import streamlit as st
@@ -15,6 +16,8 @@ from hcai.config import load_config
 from hcai.errors import HcaiError, PatientInputError
 from hcai.ml.schema import CLINICAL_TEST_FIELDS, LABELS, PatientInput
 from hcai.rag.pipeline import Answer
+
+faulthandler.enable()  # a native crash (SIGILL/SIGSEGV) prints the Python stack to the host log
 
 NEEDS_TEST = "🩺 needs a clinical test"
 YES_NO = {"No": 0, "Yes": 1}
