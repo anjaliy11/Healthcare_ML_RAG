@@ -238,7 +238,7 @@ def test_ablation_reports_every_variant_with_valid_metrics(tmp_path: Path):
     assert ablation_markdown(None) == "" and ablation_markdown([]) == ""
 
 
-def test_default_config_uses_hybrid_with_cap_and_rerank_off():
+def test_default_config_uses_dense_with_cap_and_rerank_off():
     rag = load_config().rag
-    assert rag.retrieval_mode == "hybrid" and rag.max_per_doc == 3 and rag.rerank is False
+    assert rag.retrieval_mode == "dense" and rag.max_per_doc == 3 and rag.rerank is False
     assert rag.rrf_k == 60

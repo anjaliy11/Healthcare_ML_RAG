@@ -660,3 +660,27 @@ def test_cli_runs_stability_compare_and_status(cfg_file, cfg, synth_data, tmp_pa
     assert _run(cfg_file, "compare", "nothing", "one") == 2
     assert _run(cfg_file, "status") == 0
     assert "loaded from" in capsys.readouterr().out
+
+
+# ----------------------------------------- found in the real run: self-comparison + fetch counting
+def test_import_refuses_a_metrics_file_written_by_the_current_build(cfg, synth_data, tmp_path):
+    """The real mistake: train (0.3) overwrote metrics.json, then it was imported as 'build 0.2'."""
+    from hcai.ml.runs import RunNotFoundError, import_legacy
+    from hcai.ml.train import train
+
+    train(cfg, data=synth_data)
+    current = cfg.paths.reports_dir / "metrics.json"
+    with pytest.raises(RunNotFoundError, match=r"build 0\.3 or later"):
+        import_legacy(cfg, current, "cleveland", "build02", "0.2")
+    assert import_legacy(cfg, current, "cleveland", "forced", "0.2", allow_current_build=True)
+
+
+def test_fetch_counts_alternates_as_success():
+    from hcai.rag.fetch import failed_ids
+
+    status = {
+        "a": "ok",
+        "b": "ok (alternate: https://x)",
+        "c": "FAILED: HTTPError: 403 | HTTPError: 403",
+    }
+    assert failed_ids(status) == ["c"]

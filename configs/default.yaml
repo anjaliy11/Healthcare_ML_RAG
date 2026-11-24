@@ -61,7 +61,7 @@ rag:
   max_query_chars: 500
   extractive_sentences: 3
   # Retrieval strategy (measured by the ablation table in `python -m hcai eval`)
-  retrieval_mode: hybrid    # dense | bm25 | hybrid (dense + BM25, reciprocal-rank fusion)
+  retrieval_mode: dense     # dense | bm25 | hybrid (dense + BM25, RRF). dense: hybrid did not beat it on the golden set (README)
   rrf_k: 60                 # RRF damping constant (standard value)
   max_per_doc: 3            # diversity cap: at most N chunks from one document in the top-k (null = off)
   rerank: false             # cross-encoder reranking (downloads a ~280 MB model on first use)
