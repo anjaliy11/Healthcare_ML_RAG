@@ -11,10 +11,11 @@
 
 Docs: [ARCHITECTURE](docs/ARCHITECTURE.md) · [DESIGN](docs/DESIGN.md) (decision log) · [MODEL_CARD](docs/MODEL_CARD.md) · [LIMITATIONS](docs/LIMITATIONS.md) · [RUN_COMPARISON](docs/RUN_COMPARISON.md) · [BUILD_NOTES](docs/BUILD_NOTES.md) · full generated reports in [docs/results/](docs/results/).
 
+
 ## Streamlit deployed app link
-```
 - URL: https://healthcaremlrag-m8hv7oaamxr6hehkaawwvq.streamlit.app/
-```
+
+
 
 ## Project structure
 ```
@@ -224,12 +225,9 @@ Problems (old install shadowing, `train` stops, CDC 403, slow tests): see the is
 
 
 ## Screenshots
-Add after running the app on the real data (see `docs/screenshots/README.md`):
-`docs/screenshots/streamlit_assess.png` (risk estimate + cited explanations), `docs/screenshots/streamlit_ask.png` (cited answer and a refusal), `docs/screenshots/cli_ask.png`.
+see `docs/screenshots/`
 
 
-
-```
 
 ## External services, libraries and models (disclosure)
 - **Datasets**: UCI Heart Disease, Cleveland subset, via `ucimlrepo` (https://archive.ics.uci.edu/dataset/45/heart+disease), the primary dataset; Kaggle *Heart Failure Prediction Dataset* by fedesoriano (https://www.kaggle.com/datasets/fedesoriano/heart-failure-prediction), used only for the comparison and not redistributed in this repository (download it yourself; check its licence on the Kaggle page).
