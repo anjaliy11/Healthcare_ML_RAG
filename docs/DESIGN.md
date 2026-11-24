@@ -226,3 +226,7 @@ Deviations from the layout: `rag/fetch.py` (fetch logic, so it is unit-tested; `
 `HashingEmbedder` in `rag/embeddings.py` (lexical, offline; used for tests and `index --offline`);
 `python -m hcai` replaces `make` on Windows. The occlusion-based factor attribution is model-agnostic so it works
 for whichever model is selected.
+
+
+## 12f. Retrieval default changed to dense (24 Nov 2026)
+On the 30-question golden set (21 with expected sources) dense scored hit@1 1.00 / MRR 1.00 at ~94 ms; hybrid RRF 0.95 / 0.98 at ~172 ms. Per the rule in the table above (add hybrid only if it measurably improves), `rag.retrieval_mode` is `dense`. n=21 is small, so this is "no evidence hybrid helps here", not "hybrid never helps"; revisit on a larger corpus.

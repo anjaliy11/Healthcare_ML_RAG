@@ -14,7 +14,8 @@ Two comparisons are supported, both produced by the tool from archived run summa
 # 1. Cache the Cleveland data in the NEW folder first
 python -m hcai data
 
-# 2. Archive the run you already have (build 0.2). Its metrics.json was written even though training aborted.
+# 2. Archive the run you already have (build 0.2) BEFORE training with 0.3: `train` overwrites artifacts\reports\metrics.json.
+#    (The import refuses a file written by build 0.3+, because comparing a run with itself is meaningless.)
 python -m hcai runs --import-metrics C:\path\to\OLD_FOLDER\artifacts\reports\metrics.json --tag build02 --build 0.2 --assume-same-data
 
 # 2b. New build, primary dataset

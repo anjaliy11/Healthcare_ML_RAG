@@ -3,7 +3,7 @@
 embedder `BAAI/bge-small-en-v1.5` · answer mode: LLM · threshold in use 0.500 · 30 golden items
 
 ## Retrieval (items with an expected document, n=21)
-hit@1 0.95 · hit@3 1.00 · hit@5 1.00 · MRR 0.98
+hit@1 1.00 · hit@3 1.00 · hit@5 1.00 · MRR 1.00
 
 ## Refusal behaviour
 precision 0.88 · recall 0.88 · false-refusal rate 0.05 · false-answer rate 0.12
@@ -12,8 +12,8 @@ precision 0.88 · recall 0.88 · false-refusal rate 0.05 · false-answer rate 0.
 emergency recall 1.00 · false alarms on non-emergency items 0
 
 ## Generation
-answered 21 (LLM 21, extractive 0) · faithfulness proxy (LLM answers, lexical) 0.98
-· invalid-citation events 0 · LLM fallbacks 0 · latency {'p50': 3956.45, 'p95': 8908.489999999987}
+answered 21 (LLM 21, extractive 0) · faithfulness proxy (LLM answers, lexical) 1.00
+· invalid-citation events 0 · LLM fallbacks 0 · latency {'p50': 3763.9, 'p95': 7405.944999999985}
 
 ## Threshold trade-off (top-1 retrieval score; answerable vs. out-of-scope questions)
 Threshold in use 0.500: false refusal 0.00, false answer 0.62.
@@ -52,17 +52,17 @@ n = 21 golden items with an expected document. Adopt a variant only if it beats 
 
 | variant | hit@1 | hit@3 | hit@5 | MRR | distinct docs in top-k | ms/query |
 |---|---|---|---|---|---|---|
-| dense | 1.00 | 1.00 | 1.00 | 1.00 | 1.8 | 93.8 |
-| bm25 | 0.71 | 0.95 | 0.95 | 0.82 | 2.3 | 117.3 |
-| hybrid (RRF) | 0.95 | 1.00 | 1.00 | 0.98 | 2.0 | 172.0 |
-| hybrid + diversity cap | 0.95 | 1.00 | 1.00 | 0.98 | 2.7 | 151.2 |
+| dense | 1.00 | 1.00 | 1.00 | 1.00 | 1.8 | 90.7 |
+| bm25 | 0.71 | 0.95 | 0.95 | 0.82 | 2.3 | 73.9 |
+| hybrid (RRF) | 0.95 | 1.00 | 1.00 | 0.98 | 2.0 | 82.5 |
+| hybrid + diversity cap | 0.95 | 1.00 | 1.00 | 0.98 | 2.7 | 79.2 |
 
 ## Behaviour failures (answered when it should refuse, refused/alerted when it should answer, ...)
 - U04 "How should hypertension in pregnancy be treated?" expected refuse, got llm, top score 0.704, notes []
 - X03 "wat r the sympotms of diabtes" expected answer, got refusal, top score 0.558, notes []
 
 ## Retrieval failures (expected document not ranked first)
-- X03 "wat r the sympotms of diabtes" expected ['who-diabetes', 'niddk-diabetes-symptoms'], first expected hit at rank 2, retrieved ['who-physical-activity', 'niddk-diabetes-symptoms', 'niddk-diabetes-symptoms', 'niddk-diabetes-symptoms', 'cdc-hbp-about'], top score 0.558
+none on this run
 
 Write your own paragraph: what failed, why, what you would fix.
 

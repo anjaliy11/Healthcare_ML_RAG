@@ -1,87 +1,19 @@
-# hcai: healthcare ML risk classifier + grounded RAG QA
+# hcai: healthcare ML risk classifier + grounded RAG question answering
 
-**Demonstration prototype, not a medical device.** It does not diagnose or advise treatment.
+**Demonstration prototype, not a medical device.** It does not diagnose or advise treatment. Built for the *AI/ML Engineer 40-hour assessment* (ML + RAG).
 
-1. **ML**: heart-disease presence classifier on UCI Cleveland (LogReg / RandomForest / HistGradientBoosting and more), leakage-free pipeline, 5 metrics with bootstrap CIs; optional second dataset (Kaggle Heart Failure Prediction, 918 rows) for a comparison.
-2. **RAG**: question answering over 9 public WHO / CDC / NIDDK pages. Answers cite sources, and say so when the documents don't contain the answer.
-3. **Interface**: CLI and Streamlit app combining both (risk estimate + cited explanation of the top risk factors).
+| Assessment part | What is here | Entry point |
+|---|---|---|
+| 1. Machine learning | Heart-disease presence classifier on UCI Cleveland: 6 candidate models, leakage-free pipeline, accuracy / precision / recall / F1 / ROC-AUC with bootstrap CIs, saved model + prediction function | `python -m hcai train` |
+| 2. RAG | Question answering over 9 public WHO / NIDDK / NHLBI documents (FAISS), cited sources, explicit "not in the documents" refusal | `python -m hcai ask "..."` |
+| 3. Interface (optional) | CLI and Streamlit app: enter patient fields → risk estimate + cited explanation of the top risk factors | `python -m hcai assess`, `streamlit run ...` |
+| Extra | Second dataset (Kaggle Heart Failure, 918 rows) for a cross-dataset comparison; run archive and comparison; split-stability study | `train --dataset`, `compare`, `stability` |
 
-## Quickstart on Windows (VS Code + PowerShell)
-Prerequisites: Python 3.12 or 3.13 (python.org; tick "Add to PATH"), VS Code with the *Python* and *Ruff* extensions.
+Docs: [ARCHITECTURE](docs/ARCHITECTURE.md) · [DESIGN](docs/DESIGN.md) (decision log) · [MODEL_CARD](docs/MODEL_CARD.md) · [LIMITATIONS](docs/LIMITATIONS.md) · [RUN_COMPARISON](docs/RUN_COMPARISON.md) · [BUILD_NOTES](docs/BUILD_NOTES.md) · full generated reports in [docs/results/](docs/results/).
 
-```powershell
-cd hcai
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1          # if blocked: Set-ExecutionPolicy -Scope Process Bypass
-pip install -r requirements.lock
-pip install -e . --no-deps
-```
-In VS Code: Ctrl+Shift+P → *Python: Select Interpreter* → `.venv`.
-
-**1. Verify the build (no internet or API key needed):**
-```powershell
-python -m pytest            # expect: 224 passed, ~93% coverage
-python -m ruff check . ; python -m mypy
-```
-**2. Real data and models (needs internet):**
-```powershell
-python -m hcai data                    # downloads UCI Cleveland once, caches in data/raw
-python -m hcai train                   # ~1.5-3 min; metrics + CIs + plots -> artifacts/reports/
-python scripts/fetch_docs.py           # snapshots 9 documents + manifest.json
-python -m hcai index                   # downloads bge-small (~130 MB) first time
-python -m hcai eval                    # RAG eval + threshold recommendation
-python -m hcai status                  # shows what exists + which hcai folder is loaded
-```
-If a document fails to download, save its text by hand (use `## ` for headings) and run
-`python scripts/fetch_docs.py --add-local page.txt --doc-id ID --title T --url U --license L`.
-If the UCI download fails, get `processed.cleveland.data` from the UCI page and run `python -m hcai data --source-file <path>`.
-
-**3. Use it:**
-```powershell
-copy .env.example .env                 # optional: put GEMINI_API_KEY=... (free key: aistudio.google.com/apikey)
-                                       # no key => extractive answers (still cited, no LLM)
-python -m hcai ask "What are the risk factors for high blood pressure?"
-python -m hcai assess --example --out patient.json     # writes UTF-8 (do not use > in PowerShell 5)
-python -m hcai assess --input patient.json
-python -m streamlit run src/hcai/app/streamlit_app.py
-python -m hcai monitor                 # request metrics; add --drift-csv rows.csv for drift
-```
-`make <target>` works too where `make` exists (see Makefile). Offline demo without model download: `python -m hcai index --offline` (lexical only).
-VS Code: *Run and Debug* has ready configs (`.vscode/launch.json`); the Testing panel runs pytest.
-
-After `eval`, read the "Threshold trade-off" section: it shows the false-refusal / false-answer rates at the threshold in use and a suggestion that keeps false refusals ≤ 5%. Change `rag.score_threshold` only if you accept that trade, then re-run `eval`.
-
-**4. Compare runs and datasets** (details and interpretation rules: [docs/RUN_COMPARISON.md](docs/RUN_COMPARISON.md)):
-```powershell
-python -m hcai runs --import-metrics <old folder>\artifacts\reports\metrics.json --tag build02 --build 0.2 --assume-same-data
-python -m hcai train --tag build03
-python -m hcai train --dataset kaggle_heart_failure --source-file <path>\heart.csv --tag kaggle   # Kaggle: Heart Failure Prediction Dataset
-python -m hcai compare build02 build03
-python -m hcai compare build03 kaggle
-python -m hcai stability                # split-to-split AUC spread
-```
-
-## Troubleshooting (Windows)
-| Symptom | Fix |
-|---|---|
-| `status` prints a `hcai ... loaded from` path that is not this folder | An older install is shadowing it. In this folder: `pip install -e . --no-deps`. |
-| `train` stops with "Model NOT saved: …" | A leakage check failed (duplicates, a feature that alone predicts the target, or label-shuffle AUC far above 0.5). Read `artifacts\reports\model_report.md`; this is a real finding, not noise. A test AUC above 0.96 alone only prints a NOTE. |
-| CDC page 403 | `fetch_docs.py` retries with alternates (NHLBI) automatically and says which URL it used; if both fail use `--add-local`. |
-| `UnicodeDecodeError` reading patient.json | Fixed in 0.3 (UTF-16 handled). Prefer `--example --out patient.json`. |
-| `ask` slow (> 25 s) or "notes: llm_fallback:llm_error" | Free-tier quota or network: the answer is still produced from the extractive fallback. Wait a minute, or run `ask --no-llm`. |
-| Tests slow | `python -m pytest --durations=10` and look at the slowest. |
-
-## Results
-Not stored here by design: run `python -m hcai train` and paste the table from `artifacts/reports/model_report.md`
-(test metrics with 95% CIs, CV ROC-AUC, calibration, ablations, leakage checks) and `rag_eval.md`.
-Cleveland ROC-AUC is typically 0.88-0.93 but a 61-row test set moves by several points between splits, so a value above 0.96
-is only a warning. Training stops (and saves nothing) when a **direct** leakage check fails: train/test duplicate rows, a single feature that alone
-separates the classes, or a label-shuffle test AUC far from 0.5. Run `python -m hcai stability` to see the spread on your data.
-After running everything, `python -m hcai report` fills the block below with the measured numbers (nothing is typed by hand) and copies the full reports to `docs/results/`.
-Run comparisons (build vs build, Cleveland vs Kaggle): `python -m hcai compare`, see [docs/RUN_COMPARISON.md](docs/RUN_COMPARISON.md). What changed in 0.3 and why: [docs/BUILD_NOTES.md](docs/BUILD_NOTES.md).
-
+## Results (generated from `artifacts/`; nothing here is typed by hand)
 <!-- RESULTS:START (generated by `python -m hcai report`; do not edit by hand) -->
-_Generated 2026-11-24 07:51 UTC by hcai 0.3.0 from `artifacts/`. Test sets are small (Cleveland n≈61): read every number with its CI._
+_Generated 2026-11-24 08:35 UTC by hcai 0.3.0 from `artifacts/`. Test sets are small (Cleveland n≈61): read every number with its CI._
 
 #### Primary model (UCI Cleveland)
 303 rows · train 242 / test 61 · absent features: none · selected model: **logreg**
@@ -131,25 +63,23 @@ Leakage checks: **PASS** · duplicate test rows 0 · strongest single feature `s
 |---|---|---|---|---|---|
 | 20261124-072319_cleveland_build03 | 0.3.0 | cleveland | logreg | 0.961 [0.90, 1.00] | warn |
 | 20261124-073615_kaggle_heart_failure_kaggle | 0.3.0 | kaggle_heart_failure | logreg | 0.936 [0.90, 0.97] | pass |
-| 20261124-073737_cleveland_build02 | 0.2 | cleveland | logreg | 0.961 [0.90, 1.00] | warn |
 
 Comparisons (full tables in `docs/results/`):
 - **20261124-072319_cleveland_build03** vs **20261124-073615_kaggle_heart_failure_kaggle**: Different datasets: populations, feature sets and test sets differ, so absolute numbers are not directly comparable. Compare the pattern (model ranking, CI width, calibration), not the decimals. 95% CIs overlap.
-- **20261124-073737_cleveland_build02** vs **20261124-072319_cleveland_build03**: Same dataset but the data hash or seed differs (or is unknown for an imported run): the split may differ, so small differences are within split noise. 95% CIs overlap.
 
 #### RAG evaluation (golden set)
 30 items · threshold in use 0.500 (false refusal 0.00, false answer 0.62)
 
 | metric | value |
 |---|---|
-| retrieval hit@1 / hit@3 / hit@5 | 0.95 / 1.00 / 1.00 |
-| retrieval MRR | 0.98 |
+| retrieval hit@1 / hit@3 / hit@5 | 1.00 / 1.00 / 1.00 |
+| retrieval MRR | 1.00 |
 | refusal precision / recall | 0.88 / 0.88 |
 | false-refusal / false-answer rate | 0.05 / 0.12 |
 | emergency recall · false alarms | 1.00 · 0 |
 | answers (LLM / extractive) | 21 / 0 |
-| faithfulness proxy (lexical, LLM answers) | 0.98 |
-| latency p50 / p95 (ms) | 3956 / 8908 |
+| faithfulness proxy (lexical, LLM answers) | 1.00 |
+| latency p50 / p95 (ms) | 3764 / 7406 |
 | behaviour failures | 2 |
 
 | retrieval variant | hit@1 | hit@3 | MRR |
@@ -161,60 +91,192 @@ Comparisons (full tables in `docs/results/`):
 
 <!-- RESULTS:END -->
 
+## Analysis
+
+*Figures below are from the run of 24 Nov 2026 (seed 42, `configs/default.yaml`); the generated block above has the full tables.*
+
+### ML: which model is best, and how much to trust it
+- **Data.** UCI Cleveland, 303 patients, target `num > 0` (45.9% positive), 242 train / 61 test, stratified. Missing values: `ca` (4) and `thal` (2), imputed inside the pipeline and flagged.
+- **Six candidates** (logistic regression, logistic regression + 2 engineered features, RBF-SVM, random forest, gradient boosting, soft-vote ensemble) were tuned by grid search in 5×3 repeated stratified CV on the training split only. CV ROC-AUC: 0.871 – 0.901. Held-out test ROC-AUC: 0.949 – 0.969, and **all 95% bootstrap CIs overlap**, as does every paired difference against the baseline.
+- **Selected: logistic regression.** The best CV score (voting, 0.901) beat it (0.899) by less than the 0.01 selection margin, so the simplest, best-calibrated model was kept. On the test set it reaches ROC-AUC 0.961 [0.90, 1.00], accuracy 0.885, precision 0.839, recall 0.929, F1 0.881.
+- **Read the 0.961 with care.** It is higher than the honest estimates: nested-CV 0.896 ± 0.044 and a 100-split study of the same pipeline (mean 0.908, std 0.031, 5% of clean splits above 0.96). The test split was a favourable one, so the expected performance on new patients is about 0.90, not 0.96. The training run reported this as a **WARN, not a failure**, because all direct leakage checks were clean: 0 duplicate rows between train and test, the strongest single feature (`thal`) alone reaches only 0.78 AUC, and a baseline trained on shuffled labels scores 0.51 on the test set (chance level).
+- **Why a warning rather than an abort.** An earlier build aborted on this exact split because its best candidate scored 0.965 (the same number the current gradient-boosting model gets on this split) and a fixed ceiling of 0.96 was exceeded. A 61-row test set cannot support a fixed ceiling, so the gate was replaced by the direct checks above (BUILD_NOTES #1). The models and metrics did not change between builds; only the gate did.
+- **Second dataset (Kaggle Heart Failure Prediction, 918 rows, no `ca`/`thal`).** Same pipeline, selected model again logistic regression: test ROC-AUC 0.936 [0.90, 0.97], accuracy 0.902, precision 0.896, recall 0.931; CV 0.927 ± 0.028, nested-CV 0.924 ± 0.017; leakage checks PASS (shuffle AUC 0.53). All six models are within 0.932 – 0.944 on its test set. The test set is three times larger (184 rows), hence narrower CIs. Absolute numbers are **not comparable** with Cleveland's (different patients, different feature set, and the Kaggle file contains Cleveland-derived rows), but the pattern agrees: a linear model matches the tree ensembles on small clinical tables, and the CIs overlap.
+- **Recall-oriented use.** The selected model reaches recall 0.929 at the default 0.5 threshold; a separate recall-targeted threshold chosen on out-of-fold training predictions is in `model_report.md`.
+
+### RAG: what works, what fails
+- **Corpus.** 9 documents, 110 chunks: 6 WHO fact sheets (hypertension, cardiovascular diseases, diabetes, healthy diet, physical activity, tobacco), 1 NIDDK page (diabetes symptoms and causes) and 2 NHLBI pages (high blood pressure; causes and risk factors). The two CDC pages returned HTTP 403, so documented NHLBI alternates were used; the manifest records the URL actually fetched.
+- **Golden set.** 30 questions written by the author (answerable, out-of-scope, and adversarial: typos, prompt injection, emergency phrasing); 21 have an expected source document.
+- **Retrieval (default `dense`).** hit@1 1.00, hit@3 1.00, MRR 1.00 (n = 21). **Ablation** (ranking only): BM25 0.71 / 0.95 (hit@1 / hit@3), hybrid RRF 0.95 / 1.00, hybrid + diversity cap 0.95 / 1.00. **Hybrid did not beat dense** on this small, clean corpus (a one-question difference, within noise), so by the DESIGN rule (adopt a variant only if it beats dense) the default is `rag.retrieval_mode: dense`. Per-query time was similar for all variants (about 74 to 91 ms in the final run; an earlier run measured hybrid as slower, so I do not claim a speed difference). `hybrid` is a one-line change in `configs/default.yaml`; n = 21 supports "no evidence hybrid helps here", not "hybrid never helps".
+- **Refusal behaviour.** Precision 0.88, recall 0.88, false-refusal rate 0.05 (1 of 21 answerable questions refused), false-answer rate 0.12 (1 of 8 out-of-scope questions answered). At the configured retrieval threshold (0.50) the score gate alone lets 62% of out-of-scope questions through; the LLM's own `NOT_IN_DOCUMENTS` reply does the rest, so both layers are needed. The suggested stricter threshold (0.67) would **not** fix the failure below (its top score is 0.704) and 0.72 would start refusing answerable questions (10%), so the threshold stays at 0.50.
+- **Safety.** Emergency recall 1.00, 0 false alarms on non-emergency items. The gate is a keyword/phrasing rule set tested on a short list, not on real traffic.
+- **Generation.** 21 of 21 answers came from the LLM (Gemini free tier), 0 invalid citations, 0 fallbacks; lexical faithfulness proxy 1.00 (a proxy for overlap with the sources, not entailment); latency p50 3.8 s, p95 7.4 s.
+- **Two failures, left visible rather than tuned away:**
+  1. *U04, "How should hypertension in pregnancy be treated?"*: answered instead of refused (top score 0.704). The corpus is general-population fact sheets with no pregnancy guidance, so the answer is not supported for that population. Fix to try: a prompt rule to refuse when the passages do not address the population or condition asked, then re-run the golden set.
+  2. *X03, "wat r the sympotms of diabtes"* (typos): refused. Retrieval is **not** the cause in the dense run (the expected diabetes document is ranked first, top score 0.558, above the 0.50 threshold); the LLM returned `NOT_IN_DOCUMENTS` for the misspelt question. Fix to try: query spelling normalisation or a rewrite step before generation, then re-run.
+
+## Quickstart on Windows (VS Code + PowerShell)
+Prerequisites: Python 3.12 or 3.13 (python.org, tick "Add to PATH"), VS Code with the *Python* and *Ruff* extensions, internet for the first run.
+
+```powershell
+git clone <this repo> ; cd <repo folder>
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1          # if blocked: Set-ExecutionPolicy -Scope Process Bypass
+pip install -r requirements.lock
+pip install -e . --no-deps
+python -m hcai status                 # first line must name THIS folder and version 0.3.0
+```
+In VS Code: Ctrl+Shift+P → *Python: Select Interpreter* → `.venv`. *Run and Debug* has ready configurations (`.vscode/launch.json`).
+
+**1. Verify (offline, no key needed)**
+```powershell
+python -m pytest                      # hermetic tests; takes 1-10 minutes depending on the machine
+python -m ruff check . ; python -m mypy
+```
+**2. ML**
+```powershell
+python -m hcai data                   # downloads UCI Cleveland once, caches in data/raw
+python -m hcai train --tag build03    # ~2 min; metrics, CIs, plots, leakage checks -> artifacts/reports/
+python -m hcai stability              # how much test AUC moves between random splits (~1 min)
+```
+**3. RAG**
+```powershell
+copy .env.example .env                # put GEMINI_API_KEY=... (free key: aistudio.google.com/apikey); without it answers are extractive
+python scripts\fetch_docs.py          # snapshots 9 documents + manifest.json (alternates used if a page blocks us)
+python -m hcai index                  # downloads bge-small (~130 MB) the first time
+python -m hcai eval                   # golden-set evaluation with ablation (takes a few minutes with the LLM)
+```
+If a document cannot be downloaded: save its text by hand (`## ` for headings) and run `python scripts\fetch_docs.py --add-local page.txt --doc-id ID --title T --url U --license L`.
+
+**4. Use it**
+```powershell
+python -m hcai ask "What are the risk factors for high blood pressure?"
+python -m hcai assess --example --out patient.json      # writes UTF-8; do not use > in PowerShell 5
+python -m hcai assess --input patient.json
+python -m streamlit run src/hcai/app/streamlit_app.py
+python -m hcai monitor                                   # request metrics; --drift-csv rows.csv for drift
+```
+**5. Second dataset and comparisons** (details: [RUN_COMPARISON](docs/RUN_COMPARISON.md))
+```powershell
+# download heart.csv from https://www.kaggle.com/datasets/fedesoriano/heart-failure-prediction (free account), unzip it
+python -m hcai train --dataset kaggle_heart_failure --source-file "$HOME\Downloads\heart_kaggle\heart.csv" --tag kaggle
+python -m hcai runs                                      # list archived runs
+python -m hcai compare build03 kaggle
+```
+**6. Refresh the results block above** after any new run: `python -m hcai report` (also copies the full reports to `docs/results/`).
+
+`make <target>` works where `make` exists (see Makefile).
+
+### Troubleshooting
+| Symptom | Fix |
+|---|---|
+| `status` shows a different folder or an old version | An older install shadows it. In this folder: `pip install -e . --no-deps` |
+| `train` stops with "Model NOT saved: ..." | A direct leakage check failed. Read `artifacts\reports\model_report.md`; a test AUC above 0.96 alone only prints a NOTE |
+| A CDC page returns 403 | Handled: the NHLBI alternate is used and recorded in the manifest |
+| `ask` is slow or shows `llm_fallback` | Free-tier quota or network; the extractive fallback still answers. Wait a minute or use `--no-llm` |
+| `UnicodeDecodeError` reading patient.json | Fixed; prefer `--example --out patient.json` |
+| Tests are slow | `python -m pytest --durations=10` |
+
+## Screenshots
+Add after running the app on the real data (see `docs/screenshots/README.md`):
+`docs/screenshots/streamlit_assess.png` (risk estimate + cited explanations), `docs/screenshots/streamlit_ask.png` (cited answer and a refusal), `docs/screenshots/cli_ask.png`.
+
+## Project structure
+```
+.
+├── README.md                  setup, results, analysis, disclosures
+├── CLAUDE.md / AGENTS.md      project rules used during development (settled decisions, hard rules)
+├── pyproject.toml             package metadata, dependencies, ruff / mypy / pytest settings
+├── requirements.lock          exact versions the tests passed with
+├── Makefile                   shortcuts (Windows: run `python -m hcai ...` directly)
+├── .streamlit/config.toml     UI theme (light, blue palette)
+├── configs/default.yaml       every tunable: seed, split, CV, grids, leakage limits, chunking, retrieval, thresholds, LLM
+├── .env.example               GEMINI_API_KEY placeholder (the real .env is gitignored)
+├── src/hcai/
+│   ├── config.py logging.py errors.py textio.py report.py
+│   ├── ml/                    data.py datasets.py schema.py features.py train.py evaluate.py
+│   │                          leakage.py runs.py predict.py registry.py
+│   ├── rag/                   fetch.py ingest.py chunking.py embeddings.py store.py bm25.py retriever.py
+│   │                          rerank.py safety.py prompts.py generator.py pipeline.py
+│   ├── monitoring/            metrics.py (JSONL, whitelisted fields)  drift.py (KS / chi-square)
+│   ├── app/                   service.py cli.py streamlit_app.py
+│   └── eval/                  rag_eval.py  golden.jsonl (30 questions)
+├── scripts/fetch_docs.py      one-time document snapshot (+ manual --add-local fallback)
+├── data/raw/docs/             document snapshots + manifest.json (url, licence, date, sha256)
+├── tests/                     unit/ integration/ fixtures/ (hermetic: fake embedder, scripted LLM, synthetic data)
+├── docs/                      ARCHITECTURE DESIGN MODEL_CARD LIMITATIONS BUILD_NOTES RUN_COMPARISON screenshots/ results/
+└── artifacts/                 (gitignored) model.joblib, index/, reports/, runs/, datasets/<name>/
+```
+
 ## Architecture
+Two independent subsystems joined by a thin service layer; either can be down without the other. Full description, contracts and failure modes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+```mermaid
+flowchart TB
+    subgraph ML["ML subsystem (python -m hcai train)"]
+        D[UCI Cleveland CSV] --> P["Pipeline: impute + encode + scale + model<br/>(fit on train only)"]
+        P --> S["6 candidates, repeated-CV selection<br/>(simplest model within 0.01 AUC)"]
+        S --> G{"leakage gate<br/>duplicates, single-feature proxy,<br/>label-shuffle"}
+        G -->|pass or warn| M[("model.joblib<br/>+ metadata, sha256")]
+        G -->|fail| X["abort: nothing saved"]
+        M --> R["predict_risk()<br/>probability, band, top factors"]
+    end
+    subgraph RAG["RAG subsystem (python -m hcai index / ask)"]
+        W["9 WHO / NIDDK / NHLBI pages"] --> I["fetch + clean + section-aware chunks<br/>(110 chunks)"]
+        I --> E["bge-small-en-v1.5 embeddings"]
+        E --> V[("FAISS IndexFlatIP<br/>+ JSON sidecar")]
+        Q[question] --> SG{"emergency<br/>phrasing?"}
+        SG -->|yes| UC["urgent-care message,<br/>no retrieval"]
+        SG -->|no| T["retrieve top-k (dense default)"]
+        V --> T
+        T --> TH{"top score >= 0.50?"}
+        TH -->|no| RF["fixed refusal:<br/>not in the documents"]
+        TH -->|yes| L["Gemini free tier, fenced passages"]
+        L -->|"NOT_IN_DOCUMENTS"| RF
+        L -->|"cited answer"| CV["validate [C#] tags<br/>strip invalid"]
+        L -->|"error / timeout / uncited"| FB["extractive fallback:<br/>verbatim passages"]
+    end
+    R --> SV["app/service.py<br/>assess(): risk + cited explanation per factor"]
+    CV --> SV
+    FB --> SV
+    SV --> CLI["CLI"]
+    SV --> UI["Streamlit"]
 ```
-UCI data -> validate -> Pipeline(impute+encode+scale+model) -> joblib -> predict_risk()  ─┐
-docs -> clean -> section-aware chunks -> bge-small -> FAISS (+JSON) -> retrieve(top-5, threshold)
-question -> safety gate -> retrieve -> LLM (cited) | extractive fallback | refusal        ─┴-> app.service.assess() -> CLI / Streamlit
-```
-Grounding: answers must carry `[C#]` tags; tags not in the retrieved set are stripped and logged; uncited LLM prose is never shown
-(falls back to extractive passages); retrieval score below threshold or `NOT_IN_DOCUMENTS` gives the fixed refusal.
-Retrieved text is fenced and treated as data. Emergency phrases (chest pain, stroke signs, fainting) get an urgent-care message before any retrieval.
-Patient inputs are validated with clinical ranges (rejected, never clamped) and never logged.
 
-## Model selection (what `train` does and why)
-Six candidates, each tuned by grid search inside 5x3 repeated stratified CV on the **training split only**:
-logistic regression (baseline), logistic regression + 2 engineered clinical features (`hr_pct_max`, `oldpeak_x_exang`),
-RBF-SVM (Platt-calibrated), random forest, histogram gradient boosting, and a soft-voting ensemble.
-The winner is the highest CV ROC-AUC, **but the baseline is kept unless another model beats it by more than 0.01**
-(`ml.selection_margin`): with 242 training rows, fold-to-fold noise is about ±0.03, so smaller gaps are not evidence.
-Then, on train only: sigmoid calibration is applied to the winner if it lowers out-of-fold Brier score by more than 0.005,
-a recall-oriented threshold is chosen from out-of-fold predictions, and a nested-CV estimate of "tune, then score" is computed.
-The test set is touched once. `model_report.md` shows every candidate's test metrics with bootstrap CIs plus a **paired bootstrap
-of each candidate's ROC-AUC difference from the baseline**; if no interval excludes 0, the report says none is demonstrably better.
-In my development check (a re-encoded copy of Cleveland, not your UCI download, not a reported result) all candidates tied
-within noise and logistic regression was kept; expect the same, and say so plainly in your write-up rather than claiming a gain.
+Grounding rules: answers must carry `[C#]` tags (grouped tags like `[C1, C2]` are accepted); tags outside the retrieved set are stripped and logged; uncited LLM text is never shown; a score below the threshold or a `NOT_IN_DOCUMENTS` reply gives the fixed refusal. Retrieved text is fenced and treated as data. Only the question and retrieved passages go to the LLM, never the 13 patient fields.
 
-## Retrieval strategy and ablation
-Default: **hybrid** = dense (bge-small) + BM25, merged by reciprocal-rank fusion, then a per-document diversity cap (max 3 chunks per document).
-The refusal gate still uses the dense cosine score, so fusion never changes what counts as "answerable".
-Optional cross-encoder reranking (`rag.rerank: true`, `BAAI/bge-reranker-base`) is off by default.
-`python -m hcai eval` prints an ablation table (dense / bm25 / hybrid / hybrid + cap) of hit@1/3/5, MRR, document diversity and latency;
-`python -m hcai eval --rerank` adds the reranker row. **Keep a variant only if it beats `dense` on your real corpus**, then set
-`rag.retrieval_mode`, `rag.max_per_doc` and `rag.rerank` in `configs/default.yaml` accordingly and paste the table into this README.
-
-## Corpus (snapshotted once, see `data/raw/docs/manifest.json`)
-WHO fact sheets (hypertension, CVDs, diabetes, healthy diet, physical activity, tobacco; CC BY-NC-SA 3.0 IGO, verify on page),
-NIDDK diabetes symptoms & causes, CDC about high blood pressure, CDC high blood pressure risk factors (US government works; verify per page).
-URLs are in `src/hcai/rag/fetch.py`. Do not commit text whose license you have not confirmed.
-
-## External services, libraries, models (disclosure)
-- **Dataset**: UCI Heart Disease (Cleveland), Detrano et al.; DOI 10.24432/C52P4X; fetched via `ucimlrepo`.
-- **Embedding model**: `BAAI/bge-small-en-v1.5` (Hugging Face, via sentence-transformers, runs locally on CPU).
-- **LLM / API**: Google Gemini API, free tier, default `gemini-3.5-flash-lite` with automatic fallback to `gemini-3.1-flash-lite` then `gemini-3.6-flash` when a model is rate-limited (needs `GEMINI_API_KEY`; temperature 0). Free-tier terms: Google may use prompts/responses to improve its products, so **never type real patient information**; the app sends only the question and retrieved document passages, never the 13 patient fields. Optional paid provider: Anthropic (`llm.provider: anthropic`). Without a key, answers are extractive.
-- **Libraries**: numpy, pandas, scikit-learn, scipy, joblib, pydantic, PyYAML, matplotlib, ucimlrepo, threadpoolctl, faiss-cpu, sentence-transformers (PyTorch), google-genai, streamlit, requests, beautifulsoup4; optional: anthropic; dev: pytest, pytest-cov, ruff, mypy.
-- Built with AI assistance (Claude); be ready to explain every module, see `docs/DESIGN.md` for the reasoning.
+## External services, libraries and models (disclosure)
+- **Datasets**: UCI Heart Disease, Cleveland subset, via `ucimlrepo` (https://archive.ics.uci.edu/dataset/45/heart+disease), the primary dataset; Kaggle *Heart Failure Prediction Dataset* by fedesoriano (https://www.kaggle.com/datasets/fedesoriano/heart-failure-prediction), used only for the comparison and not redistributed in this repository (download it yourself; check its licence on the Kaggle page).
+- **Documents** (one-time snapshots, licence and URL per file in `data/raw/docs/manifest.json`): WHO fact sheets (CC BY-NC-SA 3.0 IGO), NIDDK and NHLBI pages (US government works). Verify each licence on its page.
+- **Embedding model**: `BAAI/bge-small-en-v1.5` via sentence-transformers (downloaded from Hugging Face on first use). Optional cross-encoder reranker `BAAI/bge-reranker-base` is off by default.
+- **LLM / API**: Google Gemini API, free tier, default `gemini-3.5-flash-lite`, falling back to `gemini-3.1-flash-lite` then `gemini-3.6-flash` when rate-limited; temperature 0; needs `GEMINI_API_KEY`. Free-tier terms allow Google to use prompts to improve its products, so **never type real patient information**. The app sends only the question and retrieved passages, never the 13 patient fields. Optional paid provider: Anthropic (`llm.provider: anthropic`). Without a key, answers are extractive.
+- **Libraries**: numpy, pandas, scikit-learn, scipy, joblib, pydantic, PyYAML, matplotlib, ucimlrepo, threadpoolctl, faiss-cpu, sentence-transformers (PyTorch), google-genai, streamlit, requests, beautifulsoup4. Optional: anthropic. Dev: pytest, pytest-cov, ruff, mypy, pandas-stubs, types-requests, types-PyYAML. Each dependency's reason is in `docs/DESIGN.md` §13.
 
 ## Testing
-`python -m pytest` runs 224 hermetic tests: fake/hashing embedder, scripted LLM, synthetic patient data (tests only, never used for reported metrics), no network.
-Covers validation edge cases, the leakage gate (duplicates, target proxy, label shuffle, warn-vs-abort), the Kaggle adapter and run comparison, Gemini deadline/retry behaviour, grouped citations, UTF-16 input, artifact version/checksum checks, chunking invariants, ingest errors, index corruption,
-citation stripping, prompt injection (question and poisoned document), emergency gate, degradation (model missing / index missing / LLM down),
-privacy of logs, CLI and a Streamlit smoke test. `eval` (real embedder, optional real LLM) is run on demand.
+`python -m pytest` runs hermetic tests: fake and hashing embedders, a scripted LLM and Gemini SDK, synthetic patient data (tests only; never used for reported metrics), no network. They cover input validation, the leakage gate (clean, warn, abort), artifact version/checksum checks, chunking invariants, ingest errors, index corruption, citation parsing and stripping, prompt injection (question and poisoned document), the emergency gate, degradation paths (model missing, index missing, LLM down), log privacy, run comparison, README report generation, CLI messages and a Streamlit smoke test. The golden-set `eval` (real embedder, real LLM) is run on demand, not in CI.
 
-## Limitations
-See [docs/LIMITATIONS.md](docs/LIMITATIONS.md) and [docs/MODEL_CARD.md](docs/MODEL_CARD.md). Notable: 303-row single-site 1980s data, ~61-row test set, no external validation,
-several inputs need cardiology tests, probabilities not clinically calibrated, English-only corpus, crude keyword safety gate.
-`joblib` files are pickles: only load models you trained.
+## Known limitations and future improvements
+Full list: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
-## Layout
-`src/hcai/{ml,rag,monitoring,app,eval}` · `report.py` · `tests/` · `scripts/fetch_docs.py` · `configs/default.yaml` · `docs/` · `artifacts/` (gitignored)
+| Area | Limitation | Consequence | Mitigation now / next step |
+|---|---|---|---|
+| Data | 303 patients, one 1980s hospital; 61-row test set | CIs about ±0.05 AUC; one split can mislead (test 0.961 vs nested-CV 0.896) | Report CIs, nested CV and a 100-split study; next: validate on the other UCI sites |
+| Data | Kaggle comparison file is partly Cleveland-derived, different features | Not an external validation, numbers not comparable | Labelled as a comparison only |
+| Model | Probabilities not clinically calibrated; bands are demo cut-points | Risk % must not be read as a clinical probability | Sigmoid calibration only if Brier improves; next: calibrate on more data |
+| Model | Needs `ca`, `thal`, `oldpeak`, `restecg`, `thalach` (clinical tests) | A lay user cannot fill all fields | UI marks them; missing values are imputed and flagged |
+| Model | Sex imbalance (about 68% male) | Less certain for women | Disclosed in MODEL_CARD |
+| Model | Factor explanations are one-at-a-time occlusion | Not causal, ignores interactions | Worded as "raises the estimate" |
+| RAG | 9 general-population English fact sheets | No pregnancy, dosing or individual guidance; U04 still answered | Next: population-aware refusal rule |
+| RAG | Typo robustness (X03 refused) | Misspelt questions may be wrongly refused | Next: query normalisation, then re-evaluate |
+| RAG | Golden set (30) written by the author; faithfulness is lexical | Metrics are indicative, not clinical-grade | Next: clinician-reviewed set, entailment-based check |
+| RAG | Keyword emergency gate | Can miss new phrasings | Tested on a short list only; next: richer triage |
+| RAG | Retrieval choice decided on n = 21 | Dense vs hybrid may differ on a larger corpus | Ablation reruns with `eval` |
+| RAG | Free-tier Gemini: rate limits, prompts may be used by Google | Variable latency; no real patient data | Extractive fallback; only question + passages are sent |
+| Ops | No auth, audit log, Docker or hosted index; snapshots go stale | Demo only | Out of scope by design |
+
+`joblib` files are pickles: only load models you trained yourself.
+
+**Future work, in priority order:** (1) population-aware refusal rule (U04) and query normalisation (X03), each re-evaluated on the golden set; (2) external validation and calibration; (3) clinician-reviewed golden set and entailment-based faithfulness; (4) re-decide dense vs hybrid on a larger corpus; (5) multilingual retrieval and richer safety triage; (6) Docker, CI release of the index, auth and audit logging.
+
+## How this was built
+Developed with AI assistance (Claude); the design reasoning is in `docs/DESIGN.md` and the change history, including bugs found in real runs and how each was fixed and tested, in `docs/BUILD_NOTES.md`. I can explain every module.

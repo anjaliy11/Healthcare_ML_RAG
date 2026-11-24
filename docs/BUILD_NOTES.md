@@ -17,6 +17,10 @@ in `tests/unit/test_build3_fixes.py`.
 | 9 | "Failures to analyse" section was empty | It listed only retrieval-rank failures. | Added **behaviour failures** (answered when it should refuse, refused/alerted when it should answer, missed emergency) and a "none on this run" line. | `test_behaviour_expectations` |
 | 10 | `pytest` took 345 s | **Cause not established.** Not reproducible here (76 s on 2 cores). Suspected BLAS/OpenMP oversubscription on a many-core machine. | Test session caps BLAS threads to 1 (`tests/conftest.py`). If your run is still slow, run `python -m pytest --durations=10` and send me the output. | (timing, not a test) |
 
+| 11 | `fetch_docs.py` printed "2 failed" although both CDC alternates succeeded | The script counted anything other than exactly `ok` as a failure, so `ok (alternate: ...)` was a "failure". | `failed_ids()` counts only `FAILED...`. | `test_fetch_counts_alternates_as_success` |
+| 12 | `hcai report` doubled blank lines in the README on Windows (test failed on the first Windows run) | Text-mode writes turn `\n` into `\r\n`; the code re-wrote already-CRLF text. | Line endings of the README are preserved and written as bytes. | `test_publish_uses_artifact_numbers_and_is_idempotent[\n / \r\n]` |
+| 13 | A "build 0.2 vs 0.3" comparison showed identical numbers | `train` (0.3) had already overwritten `metrics.json`; it was then imported as "build 0.2", i.e. the run was compared with itself (the imported file contained 0.3-only leakage fields). | `runs --import-metrics` refuses a file written by build 0.3+ unless `--allow-current-build`; RUN_COMPARISON now says to import **before** training. | `test_import_refuses_a_metrics_file_written_by_the_current_build` |
+
 ## New in 0.3 (for the two comparisons you asked for)
 - `python -m hcai train --dataset kaggle_heart_failure --source-file <heart.csv>`: Kaggle "Heart Failure Prediction" adapter. `ca`/`thal` do not exist there; they are dropped **inside the pipeline** (`FeatureSpec`), chol/BP recorded as 0 become missing + flagged.
 - Every `train` archives a compact summary under `artifacts/runs/<id>/`; `python -m hcai runs`, `runs --import-metrics <old metrics.json>`, `python -m hcai compare A B` → `artifacts/reports/comparison_*.md`.
@@ -28,3 +32,7 @@ in `tests/unit/test_build3_fixes.py`.
 - No real Kaggle file and no real UCI download were available in the build sandbox. The Kaggle adapter is checked against the documented column names and codes (Age, Sex, ChestPainType, RestingBP, Cholesterol, FastingBS, RestingECG, MaxHR, ExerciseAngina, Oldpeak, ST_Slope, HeartDisease; one mirror calls the chest-pain column `ChestPain`, also accepted) and against synthetic files in that schema. If your `heart.csv` differs, `train` stops with a message naming the column.
 - Development numbers used for the stability evidence came from a re-encoded copy of Cleveland, not your download.
 - Live Gemini calls and live document downloads were not exercised in the sandbox (no key / network); they are covered with fakes.
+
+## UI and retrieval default (24 Nov 2026)
+- Streamlit restyled (blue palette, hero header, rounded cards, step tiles, risk card). Header tiles show only values read from the loaded model and index; no invented statistics. Widget structure is unchanged, so the UI smoke test still passes. **Not verified:** I have not seen it rendered in a browser; check the screenshots yourself.
+- `rag.retrieval_mode` default is now `dense` (DESIGN §12f).
