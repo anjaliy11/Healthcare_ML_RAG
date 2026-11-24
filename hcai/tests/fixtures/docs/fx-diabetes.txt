@@ -1,0 +1,10 @@
+# Fixture: Diabetes symptoms (test document, not real guidance)
+
+## Common symptoms
+Frequent urination, intense thirst, unexplained weight loss, constant hunger, blurred vision, tiredness and slow healing sores are common symptoms of diabetes. Type 2 diabetes can develop slowly and may cause no clear symptoms at first.
+
+## When to see a doctor
+See a clinician if you notice several of these symptoms, or if you have risk factors such as excess weight or a parent with diabetes. A simple blood test can check blood sugar.
+
+## Lifestyle
+Regular physical activity and a balanced diet with fewer sugary drinks help lower the chance of developing type 2 diabetes.

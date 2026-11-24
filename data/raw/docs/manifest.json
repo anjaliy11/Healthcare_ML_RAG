@@ -1,0 +1,67 @@
+{
+  "documents": [
+    {
+      "doc_id": "niddk-diabetes-symptoms",
+      "title": "NIDDK: Symptoms & causes of diabetes",
+      "url": "https://www.niddk.nih.gov/health-information/diabetes/overview/symptoms-causes",
+      "license": "US government work, generally public domain (verify on page)",
+      "retrieved_at": "2026-11-24",
+      "sha256": "e6a90c61e3edbfed4416fcf9f54b53538cdebaa5a888b3b9875bb071714ccb7c",
+      "file": "niddk-diabetes-symptoms.txt"
+    },
+    {
+      "doc_id": "who-cvd",
+      "title": "WHO fact sheet: Cardiovascular diseases (CVDs)",
+      "url": "https://www.who.int/news-room/fact-sheets/detail/cardiovascular-diseases-(cvds)",
+      "license": "CC BY-NC-SA 3.0 IGO (verify on page)",
+      "retrieved_at": "2026-11-24",
+      "sha256": "e697ac91ee84f5d6d42e1caea5d20c8597fe56c133014f82331868c8d3e5da33",
+      "file": "who-cvd.txt"
+    },
+    {
+      "doc_id": "who-diabetes",
+      "title": "WHO fact sheet: Diabetes",
+      "url": "https://www.who.int/news-room/fact-sheets/detail/diabetes",
+      "license": "CC BY-NC-SA 3.0 IGO (verify on page)",
+      "retrieved_at": "2026-11-24",
+      "sha256": "7b176a7ecff1276fe56ff3d25c8fb9ca5826cb79aafae9553a6b7ddadffedb48",
+      "file": "who-diabetes.txt"
+    },
+    {
+      "doc_id": "who-healthy-diet",
+      "title": "WHO fact sheet: Healthy diet",
+      "url": "https://www.who.int/news-room/fact-sheets/detail/healthy-diet",
+      "license": "CC BY-NC-SA 3.0 IGO (verify on page)",
+      "retrieved_at": "2026-11-24",
+      "sha256": "2c06f6d8aa53f8569ae0d93cf4722f69d547a20a3c4bd8c3fd852d8e94af79a9",
+      "file": "who-healthy-diet.txt"
+    },
+    {
+      "doc_id": "who-hypertension",
+      "title": "WHO fact sheet: Hypertension",
+      "url": "https://www.who.int/news-room/fact-sheets/detail/hypertension",
+      "license": "CC BY-NC-SA 3.0 IGO (verify on page)",
+      "retrieved_at": "2026-11-24",
+      "sha256": "d801d236206470233beb1b1964fe617625071b06828cbcd6f377c686601c8213",
+      "file": "who-hypertension.txt"
+    },
+    {
+      "doc_id": "who-physical-activity",
+      "title": "WHO fact sheet: Physical activity",
+      "url": "https://www.who.int/news-room/fact-sheets/detail/physical-activity",
+      "license": "CC BY-NC-SA 3.0 IGO (verify on page)",
+      "retrieved_at": "2026-11-24",
+      "sha256": "dc3f6e21f918e6c34e80935abfb400d6b2e330950d8a248abfa79a6a42534429",
+      "file": "who-physical-activity.txt"
+    },
+    {
+      "doc_id": "who-tobacco",
+      "title": "WHO fact sheet: Tobacco",
+      "url": "https://www.who.int/news-room/fact-sheets/detail/tobacco",
+      "license": "CC BY-NC-SA 3.0 IGO (verify on page)",
+      "retrieved_at": "2026-11-24",
+      "sha256": "a50ddc1a34195cf041f3d825df6253ae561c03e6887d8a38b5caee1db2a608c2",
+      "file": "who-tobacco.txt"
+    }
+  ]
+}

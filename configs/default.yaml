@@ -1,0 +1,58 @@
+# Single source of truth for every tunable. No magic numbers in code.
+seed: 42
+
+paths:
+  data_raw: data/raw
+  docs_dir: data/raw/docs
+  artifacts: artifacts
+  model: artifacts/model.joblib
+  model_meta: artifacts/model_metadata.json
+  reference: artifacts/train_reference.csv
+  index_dir: artifacts/index
+  reports_dir: artifacts/reports
+  metrics_log: artifacts/metrics.jsonl
+
+ml:
+  ucirepo_id: 45            # UCI Heart Disease; Cleveland subset has 303 rows
+  expected_rows: 303
+  test_size: 0.2
+  cv_splits: 5
+  cv_repeats: 2
+  bootstrap_resamples: 1000
+  selection_margin: 0.01    # prefer logistic regression unless another model beats it by > this CV AUC
+  target_recall: 0.90       # recall-oriented operating point, chosen on out-of-fold predictions only
+  band_low: 0.30            # demo-only cut-points, NOT clinical thresholds
+  band_high: 0.60
+  auc_floor: 0.80           # contract test: model is not broken
+  auc_ceiling: 0.96         # leakage alarm (Cleveland is expected around 0.88-0.93)
+  rf_trees: 200
+  hgb_max_iter: 150
+  permutation_repeats: 20
+  top_factors: 3
+  grids:
+    logreg: {C: [0.1, 1.0, 10.0]}
+    random_forest: {max_depth: [3, 6], min_samples_leaf: [2, 5]}
+    hist_gb: {max_depth: [2, 3], learning_rate: [0.05, 0.1]}
+
+rag:
+  embedding_model: BAAI/bge-small-en-v1.5
+  query_prefix: "Represent this sentence for searching relevant passages: "
+  chunk_target_words: 300   # ~400 tokens
+  chunk_overlap_words: 45   # ~60 tokens
+  chunk_max_words: 380
+  top_k: 5
+  score_threshold: 0.50     # real embedder; calibrate with `python -m hcai eval` and edit here
+  offline_score_threshold: 0.15   # HashingEmbedder (offline demo only) has a different score scale
+  max_query_chars: 500
+  extractive_sentences: 3
+
+llm:
+  provider: gemini          # "gemini" (free tier) | "anthropic" (paid, optional) | "none" (extractive only)
+  model: gemini-3.5-flash-lite
+  # Tried in order when the primary is rate-limited (free-tier quotas are per model) or not found.
+  fallback_models: [gemini-3.1-flash-lite, gemini-3.6-flash]
+  max_tokens: 1024          # generous: some Gemini models spend output budget on hidden reasoning
+  temperature: 0.0
+  timeout_s: 30.0
+  max_retries: 2
+  backoff_s: 1.0

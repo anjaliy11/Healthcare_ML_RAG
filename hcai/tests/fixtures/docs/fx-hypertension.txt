@@ -1,0 +1,13 @@
+# Fixture: High blood pressure (test document, not real guidance)
+
+## Overview
+High blood pressure, also called hypertension, means the force of blood against artery walls stays too high over time. Many people have no symptoms for years, so regular measurement is the only reliable way to find it.
+
+## Risk factors
+Common risk factors for hypertension include older age, a family history of high blood pressure, eating too much salt, being overweight, drinking too much alcohol, smoking, and not getting enough physical activity.
+
+## Symptoms
+Most people with high blood pressure feel nothing. Very high readings can cause headaches, blurred vision or nosebleeds, but these are not reliable signs.
+
+## When to see a doctor
+Ask a clinician to check your blood pressure at least once a year, and sooner if you have risk factors or a reading that is repeatedly above the normal range.
