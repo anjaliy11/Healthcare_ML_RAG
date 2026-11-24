@@ -41,6 +41,8 @@ def trained(tmp_path_factory):  # type: ignore[no-untyped-def]
             "rf_trees": 40,
             "hgb_max_iter": 40,
             "permutation_repeats": 3,
+            "candidates": ["logreg", "random_forest", "hist_gb"],
+            "nested_cv": False,
             "grids": {
                 "logreg": {"C": [0.1, 1.0]},
                 "random_forest": {"max_depth": [3], "min_samples_leaf": [3]},

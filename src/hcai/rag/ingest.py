@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 
 from hcai.errors import IngestError
 from hcai.logging import get_logger, log_event
+from hcai.textio import decode_bytes
 
 log = get_logger("rag.ingest")
 MANIFEST = "manifest.json"
@@ -35,15 +36,6 @@ class Document:
     retrieved_at: str
     sha256: str
     text: str
-
-
-def decode_bytes(raw: bytes) -> str:
-    for enc in ("utf-8-sig", "cp1252"):
-        try:
-            return raw.decode(enc)
-        except UnicodeDecodeError:
-            continue
-    return raw.decode("utf-8", errors="replace")
 
 
 def clean_text(raw: str) -> str:

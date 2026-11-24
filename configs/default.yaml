@@ -17,20 +17,35 @@ ml:
   expected_rows: 303
   test_size: 0.2
   cv_splits: 5
-  cv_repeats: 2
+  cv_repeats: 3
   bootstrap_resamples: 1000
   selection_margin: 0.01    # prefer logistic regression unless another model beats it by > this CV AUC
   target_recall: 0.90       # recall-oriented operating point, chosen on out-of-fold predictions only
   band_low: 0.30            # demo-only cut-points, NOT clinical thresholds
   band_high: 0.60
   auc_floor: 0.80           # contract test: model is not broken
-  auc_ceiling: 0.96         # leakage alarm (Cleveland is expected around 0.88-0.93)
+  auc_ceiling: 0.96         # WARNING level only (Cleveland is typically 0.88-0.93); not a leakage test
+  auc_abort: 0.99           # implausible: stop and do not save
+  # Direct leakage checks (ml/leakage.py). Any one failing stops the run and nothing is saved.
+  leak_single_feature_max: 0.98   # one feature alone separating the classes this well = target proxy
+  leak_shuffle_max: 0.65          # baseline trained on shuffled labels must score ~0.5 on test
+  leak_shuffle_repeats: 5
+  leak_duplicate_frac_max: 0.05   # share of test rows that also occur in train
+  stability_splits: 100           # splits used by `python -m hcai stability`
   rf_trees: 200
   hgb_max_iter: 150
   permutation_repeats: 20
   top_factors: 3
+  # Candidate models, all tuned inside CV on the training split. Measured, not assumed: on
+  # Cleveland-sized data they usually tie within noise, and the margin rule keeps the baseline.
+  candidates: [logreg, logreg_fe, svm_rbf, random_forest, hist_gb, voting]
+  voting_members: [logreg, svm_rbf, random_forest]   # soft-vote over the tuned members
+  calibration_margin: 0.005  # sigmoid-calibrate the winner if out-of-fold Brier improves by more; null = never
+  nested_cv: true            # unbiased CV estimate of the tuned winner (train split only)
   grids:
-    logreg: {C: [0.1, 1.0, 10.0]}
+    logreg: {C: [0.03, 0.1, 0.3, 1.0, 10.0]}
+    logreg_fe: {C: [0.03, 0.1, 0.3, 1.0, 10.0]}
+    svm_rbf: {estimator__C: [0.3, 1.0, 3.0], estimator__gamma: [0.01, 0.02, 0.05]}
     random_forest: {max_depth: [3, 6], min_samples_leaf: [2, 5]}
     hist_gb: {max_depth: [2, 3], learning_rate: [0.05, 0.1]}
 
@@ -45,6 +60,13 @@ rag:
   offline_score_threshold: 0.15   # HashingEmbedder (offline demo only) has a different score scale
   max_query_chars: 500
   extractive_sentences: 3
+  # Retrieval strategy (measured by the ablation table in `python -m hcai eval`)
+  retrieval_mode: hybrid    # dense | bm25 | hybrid (dense + BM25, reciprocal-rank fusion)
+  rrf_k: 60                 # RRF damping constant (standard value)
+  max_per_doc: 3            # diversity cap: at most N chunks from one document in the top-k (null = off)
+  rerank: false             # cross-encoder reranking (downloads a ~280 MB model on first use)
+  reranker_model: BAAI/bge-reranker-base
+  rerank_top_n: 20
 
 llm:
   provider: gemini          # "gemini" (free tier) | "anthropic" (paid, optional) | "none" (extractive only)
@@ -56,3 +78,6 @@ llm:
   timeout_s: 30.0
   max_retries: 2
   backoff_s: 1.0
+  deadline_s: 25.0          # ONE budget shared by all models/retries for a single answer
+  max_wait_s: 8.0           # longest server-requested (429 retryDelay) wait we will sit out
+  min_interval_s: 0.0       # >0 spaces calls (set ~4 for `hcai eval` on the free tier, 15 req/min)

@@ -1,7 +1,0 @@
-# Fixture: Healthy diet (test document, not real guidance)
-
-## Salt and sugar
-Eating less salt helps lower blood pressure. Adults should limit salt, choose fresh foods over processed foods, and cut back on sugary drinks.
-
-## Fruit and vegetables
-A healthy diet includes plenty of vegetables, fruit, legumes, nuts and whole grains. Replace saturated fats with unsaturated fats such as olive oil.

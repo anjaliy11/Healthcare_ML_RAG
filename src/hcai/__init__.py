@@ -1,6 +1,6 @@
 """hcai: healthcare ML risk classifier + grounded RAG QA. Demonstration prototype, not a medical device."""
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 
 DISCLAIMER = (
     "Demonstration prototype, not a medical device. This is general information from public "

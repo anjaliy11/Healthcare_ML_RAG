@@ -19,13 +19,16 @@ resampling is used. Real missing values: `ca` (4) and `thal` (2).
 - Median imputation for numerics, most-frequent for categoricals, one-hot encoding for
   `cp, restecg, slope, thal`, standard scaling for logistic regression only, plus missing-indicator
   flags for `ca`/`thal`.
-- Candidates: logistic regression (baseline), random forest, histogram gradient boosting. Small grid
-  search inside 5x2 repeated stratified CV on the training split, scored by ROC-AUC.
+- Candidates (`ml.candidates`): logistic regression (baseline); logistic regression with two stateless engineered features
+  (`hr_pct_max` = thalach / (220 - age), `oldpeak_x_exang`); RBF-SVM; random forest; histogram gradient boosting;
+  soft-voting ensemble of the tuned members. Grid search inside 5x3 repeated stratified CV on the training split, scored by ROC-AUC.
+- Calibration: sigmoid calibration is applied to the winner only if it improves out-of-fold Brier score by more than `ml.calibration_margin`.
+- Evidence of improvement: paired bootstrap of ROC-AUC difference vs the baseline on the test set, and a nested-CV estimate of the tuned winner.
 - Selection: highest CV ROC-AUC, but the interpretable baseline is kept unless another model beats it
   by more than `ml.selection_margin` (config).
 - The test set is used once: accuracy, precision, recall, F1, ROC-AUC with 95% bootstrap CIs, Brier score.
 - A recall-oriented threshold is chosen on out-of-fold training predictions, never on test.
-- Guards: ROC-AUC above `ml.auc_ceiling` (0.96) aborts and refuses to save the model (leakage alarm);
+- Guards: direct leakage checks (train/test duplicate rows, single-feature target proxy, label-shuffle AUC) stop the run and refuse to save the model; ROC-AUC above `ml.auc_ceiling` (0.96) only warns, and above `ml.auc_abort` (0.99) stops;
   contract tests check a floor of 0.80 when real data is used.
 
 ## Artifact
@@ -36,3 +39,8 @@ or checksum mismatch.
 ## Known limits
 See [LIMITATIONS.md](LIMITATIONS.md). Small single-site cohort, no external validation, features that
 need cardiology tests, uncalibrated probabilities.
+
+## Second dataset (comparison only)
+`python -m hcai train --dataset kaggle_heart_failure` trains the same pipeline on the Kaggle Heart Failure Prediction Dataset (918 rows).
+It lacks `ca` and `thal`; those inputs are ignored by that model (the app says so). Cholesterol/BP recorded as 0 are treated as missing.
+It is not the served model, and its numbers are not comparable one-to-one with Cleveland's (see docs/RUN_COMPARISON.md).

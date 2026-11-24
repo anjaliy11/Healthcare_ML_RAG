@@ -188,6 +188,26 @@ paid price doubles on 1 Jan 2027 and free limits are tighter), Gemma 4 (free, bu
 citation format). Risks: model IDs and quotas change; free-tier data may be used by Google (so no patient fields are ever sent);
 the extractive fallback keeps the app working if every model fails. Model names are config, not code.
 
+## 12c. Retrieval upgrades (implemented, evaluated by ablation)
+BM25 is implemented in-repo (`rag/bm25.py`, no dependency); dense and lexical rankings are merged with RRF (k=60) in `rag/retriever.py`.
+A per-document cap trades a little recall for broader, multi-source answers. A cross-encoder reranker is optional (`rag/rerank.py`).
+The threshold gate stays on the dense cosine because it is the only calibrated score scale. Decision rule: ship a variant only if
+the ablation in `artifacts/reports/rag_eval.md` shows it beats dense on the real corpus; with ~25 labelled items, differences under
+~0.05 are noise. Not done (ideas): small-to-big chunk retrieval, query rewriting, NLI sentence-level faithfulness.
+
+## 12d. ML model improvements (implemented, evaluated, outcome recorded in generated reports)
+Added: domain features (heart-rate reserve share, ST-depression x exertional angina), RBF-SVM, soft-voting ensemble, conditional sigmoid
+calibration, nested CV, paired-bootstrap comparison with the baseline, and a wider C grid for the baseline. Rationale for restraint: n=303,
+test n=61, CV noise about +-0.03 AUC, so the selection rule keeps the interpretable baseline unless a rival wins by > 0.01 and the report
+states whether any difference is statistically distinguishable. Rejected: SMOTE/resampling (classes are ~54/46), deep models, stacking meta-learners
+(more variance than data supports), tuning on the test set.
+
+## 12e. Build 0.3: gate redesign, second dataset, run comparison
+- **Why the fixed AUC ceiling was replaced.** A 61-row test set gives a clean pipeline an AUC spread of about ±0.03, so "AUC > 0.96 = leakage" produced a false alarm on the first real run. Leakage is now tested directly (`ml/leakage.py`), and the AUC level is a warning; `hcai stability` quantifies the spread. Alternative considered and rejected: raising the ceiling to 0.98 (still a symptom check, still arbitrary).
+- **Second dataset as a comparison, not a replacement.** Cleveland stays the primary/default (settled decision); Kaggle Heart Failure is adapted onto the same 13-column schema, with `ca`/`thal` absent and dropped inside the pipeline (`FeatureSpec`), so one pipeline/report format serves both. Its model is stored separately.
+- **Run archive.** Every training writes an immutable summary; `compare` tabulates two summaries and states what can and cannot be concluded (same split vs different data, CI overlap). Alternative rejected: an experiment-tracking service (MLflow), which would add a dependency for two comparisons.
+- **LLM latency.** One deadline per answer replaces per-call timeouts; see BUILD_NOTES #6.
+
 ## 13. Implementation addendum (dependency justification and deviations)
 | Dependency | Why it is needed |
 |---|---|
@@ -199,6 +219,7 @@ the extractive fallback keeps the app working if every model fails. Model names 
 | google-genai | Default LLM client (Gemini free tier) behind `LLMClient`; `anthropic` is an optional extra |
 | streamlit | Optional UI (Part 3) |
 | requests, beautifulsoup4 | One-time corpus snapshot script and HTML cleaning in ingest |
+| threadpoolctl | Caps BLAS threads in tests (already installed as a scikit-learn dependency; listed explicitly) |
 Dev: pytest, pytest-cov, ruff, mypy (+ type stubs).
 
 Deviations from the layout: `rag/fetch.py` (fetch logic, so it is unit-tested; `scripts/fetch_docs.py` is a thin wrapper);

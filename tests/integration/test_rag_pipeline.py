@@ -164,3 +164,20 @@ def test_rebuilding_index_is_idempotent(cfg: Config):
         json.loads((cfg.paths.index_dir / "index_meta.json").read_text())["index_sha256"] == first
     )
     assert Path(cfg.paths.index_dir / "index.faiss").is_file()
+
+
+def test_hybrid_pipeline_end_to_end_sources_refusal_and_emergency(cfg: Config):
+    build_corpus(cfg.paths.docs_dir)
+    emb = HashingEmbedder()
+    build_index(cfg, emb)
+    store = FaissStore.load(cfg.paths.index_dir)
+    r = Retriever(emb, store, 5, THRESH, 500, mode="hybrid", max_per_doc=2)
+    pipe = RagPipeline(r, Generator(ScriptedLLM("Salt and age matter [C1]. Diet too [C2]."), 3))
+    ans = pipe.ask("What are the risk factors for high blood pressure and salt?")
+    assert ans.mode == "llm" and ans.sources and ans.sources[0].doc_id == "fx-hypertension"
+    assert len({s.doc_id for s in ans.sources}) >= 1 and all(s.url for s in ans.sources)
+    out_of_domain = RagPipeline(r, Generator(None, 3)).ask(
+        "Who won the football world cup in 2018?"
+    )
+    assert out_of_domain.refused
+    assert RagPipeline(r, Generator(None, 3)).ask("I have chest pain").mode == "emergency"

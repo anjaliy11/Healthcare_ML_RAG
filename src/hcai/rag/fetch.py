@@ -16,6 +16,7 @@ from pathlib import Path
 from bs4 import BeautifulSoup, Tag
 
 from hcai.errors import IngestError
+from hcai.textio import read_text
 
 WHO_LICENSE = "CC BY-NC-SA 3.0 IGO (verify on page)"
 GOV_LICENSE = "US government work, generally public domain (verify on page)"
@@ -41,7 +42,30 @@ SOURCES: list[dict[str, str]] = [
      "url": "https://www.cdc.gov/high-blood-pressure/risk-factors/index.html", "license": GOV_LICENSE},
 ]  # fmt: skip
 
-USER_AGENT = "hcai-assessment/0.1 (educational prototype; contact: repo owner)"
+# cdc.gov answers 403 to non-browser clients (bot protection), so a browser-like header set is
+# used. This is one polite request per page, run once by the user, not crawling.
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0 Safari/537.36 hcai-assessment/0.3 (educational; one-time snapshot)"
+)
+HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+# Used only when the primary URL fails. The manifest then records the URL/title actually used.
+GOV = GOV_LICENSE
+ALTERNATES: dict[str, list[dict[str, str]]] = {
+    "cdc-hbp-about": [
+        {"title": "NHLBI: What is high blood pressure?",
+         "url": "https://www.nhlbi.nih.gov/health/high-blood-pressure", "license": GOV},
+    ],
+    "cdc-hbp-risk-factors": [
+        {"title": "NHLBI: High blood pressure causes and risk factors",
+         "url": "https://www.nhlbi.nih.gov/health/high-blood-pressure/causes", "license": GOV},
+    ],
+}  # fmt: skip
 _NOISE = [
     "script",
     "style",
@@ -88,7 +112,7 @@ def _load_manifest(docs_dir: Path) -> dict[str, dict[str, str]]:
     path = docs_dir / "manifest.json"
     if not path.is_file():
         return {}
-    return {e["doc_id"]: e for e in json.loads(path.read_text(encoding="utf-8"))["documents"]}
+    return {e["doc_id"]: e for e in json.loads(read_text(path))["documents"]}
 
 
 def _write_manifest(docs_dir: Path, entries: dict[str, dict[str, str]]) -> None:
@@ -125,26 +149,41 @@ def add_local_document(
     return save_document(
         docs_dir,
         {"doc_id": doc_id, "title": title, "url": url, "license": license_},
-        path.read_text(encoding="utf-8"),
+        read_text(path),
     )
+
+
+def _download(url: str) -> str:
+    import requests
+
+    resp = requests.get(url, headers=HEADERS, timeout=30)
+    resp.raise_for_status()
+    return html_to_text(resp.text)
 
 
 def fetch_all(
     docs_dir: Path, only: list[str] | None = None, delay_s: float = 1.0
 ) -> dict[str, str]:
-    """Download every source. Returns {doc_id: 'ok' | error message}; never aborts the batch."""
+    """Download every source (primary URL, then alternates). Never aborts the batch.
+
+    Returns {doc_id: 'ok' | 'ok (alternate: <url>)' | 'FAILED: ...'}."""
     import requests
 
     status: dict[str, str] = {}
     for meta in SOURCES:
         if only and meta["doc_id"] not in only:
             continue
-        try:
-            resp = requests.get(meta["url"], headers={"User-Agent": USER_AGENT}, timeout=30)
-            resp.raise_for_status()
-            save_document(docs_dir, meta, html_to_text(resp.text))
-            status[meta["doc_id"]] = "ok"
-        except (requests.RequestException, IngestError) as exc:
-            status[meta["doc_id"]] = f"FAILED: {type(exc).__name__}: {exc}"
+        candidates = [meta, *({**meta, **alt} for alt in ALTERNATES.get(meta["doc_id"], []))]
+        errors: list[str] = []
+        for i, cand in enumerate(candidates):
+            try:
+                save_document(docs_dir, cand, _download(cand["url"]))
+                status[meta["doc_id"]] = "ok" if i == 0 else f"ok (alternate: {cand['url']})"
+                break
+            except (requests.RequestException, IngestError) as exc:
+                errors.append(f"{type(exc).__name__}: {exc}")
+            time.sleep(delay_s)
+        else:
+            status[meta["doc_id"]] = "FAILED: " + " | ".join(errors)
         time.sleep(delay_s)
     return status

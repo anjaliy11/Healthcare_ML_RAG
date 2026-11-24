@@ -15,6 +15,7 @@ from hcai.monitoring.metrics import MetricsLog
 from hcai.rag.embeddings import Embedder, HashingEmbedder, SentenceTransformerEmbedder
 from hcai.rag.generator import AnthropicClient, GeminiClient, Generator, LLMClient
 from hcai.rag.pipeline import Answer, RagPipeline
+from hcai.rag.rerank import CrossEncoderReranker
 from hcai.rag.retriever import Retriever
 from hcai.rag.store import FaissStore
 
@@ -98,9 +99,13 @@ class Services:
                 if embedder.is_semantic
                 else self.cfg.rag.offline_score_threshold
             )
+            r = self.cfg.rag
             retriever = Retriever(
-                embedder, store, self.cfg.rag.top_k, threshold, self.cfg.rag.max_query_chars
-            )
+                embedder, store, r.top_k, threshold, r.max_query_chars,
+                mode=r.retrieval_mode, rrf_k=r.rrf_k, max_per_doc=r.max_per_doc,
+                reranker=CrossEncoderReranker(r.reranker_model) if r.rerank else None,
+                rerank_top_n=r.rerank_top_n,
+            )  # fmt: skip
             gen = Generator(make_llm(self.cfg, self.use_llm), self.cfg.rag.extractive_sentences)
             self._pipeline = RagPipeline(retriever, gen, self.metrics)
         return self._pipeline
@@ -115,6 +120,7 @@ class Services:
             p = self.pipeline
             out["embedding_model"] = p.retriever.embedder.name
             out["index_chunks"] = str(len(p.retriever.store))
+            out["retrieval"] = p.retriever.mode + ("+rerank" if p.retriever.reranker else "")
             out["answer_mode"] = "LLM" if p.generator.llm else "extractive (no LLM key)"
         except HcaiError as exc:
             out["embedding_model"] = f"unavailable ({exc})"
@@ -137,6 +143,12 @@ class Services:
             result.notes.append(
                 "Some values fall outside the range of the training data, so the estimate is "
                 "an extrapolation: " + ", ".join(risk.range_flags) + "."
+            )
+        if risk.ignored_fields:
+            result.notes.append(
+                "This model was trained on a dataset without: "
+                + ", ".join(risk.ignored_fields)
+                + ". Those values were ignored."
             )
         if risk.imputed_fields:
             result.notes.append(

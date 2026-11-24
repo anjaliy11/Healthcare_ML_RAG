@@ -37,7 +37,9 @@ def stack(tmp_path_factory):  # type: ignore[no-untyped-def]
     ml = base.ml.model_copy(
         update={"cv_repeats": 1, "bootstrap_resamples": 50, "rf_trees": 30, "hgb_max_iter": 30,
                 "permutation_repeats": 2,
-                "grids": {"logreg": {"C": [1.0]}, "random_forest": {"max_depth": [3]}, "hist_gb": {"max_depth": [2]}}}
+                "candidates": ["logreg", "random_forest", "hist_gb"],
+            "nested_cv": False,
+            "grids": {"logreg": {"C": [1.0]}, "random_forest": {"max_depth": [3]}, "hist_gb": {"max_depth": [2]}}}
     )  # fmt: skip
     cfg = base.model_copy(update={"paths": type(base.paths)(**paths), "ml": ml})
     x, y = validate_and_split_target(make_synthetic(), 303)
@@ -162,7 +164,7 @@ def test_cli_index_offline_and_eval(stack, capsys):
     assert "OFFLINE" in capsys.readouterr().out
     assert run_cli(cfg_file, "eval", "--no-llm") == 0
     out = capsys.readouterr().out
-    assert "Threshold trade-off" in out
+    assert "Threshold trade-off" in out and "Retrieval ablation" in out and "hybrid (RRF)" in out
     assert (cfg.paths.reports_dir / "rag_eval.json").is_file()
 
 

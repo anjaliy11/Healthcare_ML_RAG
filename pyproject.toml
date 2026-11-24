@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hcai"
-version = "0.1.0"
+version = "0.3.0"
 description = "Healthcare ML risk classifier + grounded RAG QA (demonstration prototype, not a medical device)"
 requires-python = ">=3.11"
 dependencies = [
@@ -20,6 +20,7 @@ dependencies = [
   "faiss-cpu>=1.8",
   "sentence-transformers>=3.0",
   "google-genai>=1.0",
+  "threadpoolctl>=3.2",
   "streamlit>=1.35",
   "requests>=2.31",
   "beautifulsoup4>=4.12",

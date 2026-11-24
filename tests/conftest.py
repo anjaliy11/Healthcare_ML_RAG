@@ -12,6 +12,16 @@ from tests.fixtures.synth import make_synthetic
 FIXTURE_DOCS = Path(__file__).parent / "fixtures" / "docs"
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _single_threaded_blas():  # type: ignore[no-untyped-def]
+    """Cap BLAS/OpenMP threads: tiny matrices gain nothing from many threads, and on machines
+    with many cores the oversubscription can make model-fitting tests several times slower."""
+    from threadpoolctl import threadpool_limits
+
+    with threadpool_limits(limits=1):
+        yield
+
+
 @pytest.fixture(autouse=True)
 def _hermetic_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """No test may ever pick up a real API key (and so never touch the network)."""
@@ -32,6 +42,8 @@ def cfg(tmp_path: Path) -> Config:
             "rf_trees": 40,
             "hgb_max_iter": 40,
             "permutation_repeats": 3,
+            "candidates": ["logreg", "random_forest", "hist_gb"],
+            "nested_cv": False,
             "grids": {
                 "logreg": {"C": [0.1, 1.0]},
                 "random_forest": {"max_depth": [3], "min_samples_leaf": [3]},

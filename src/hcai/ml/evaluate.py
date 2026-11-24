@@ -78,6 +78,26 @@ def full_report(
     }
 
 
+def paired_auc_diff_ci(
+    y: np.ndarray, p_new: np.ndarray, p_base: np.ndarray, n_resamples: int, seed: int
+) -> dict[str, float]:
+    """ROC-AUC(new) - ROC-AUC(base) with a paired bootstrap 95% CI (same resampled rows)."""
+    rng = np.random.default_rng(seed)
+    diffs: list[float] = []
+    for _ in range(n_resamples):
+        idx = rng.integers(0, len(y), len(y))
+        if len(np.unique(y[idx])) < 2:
+            continue
+        diffs.append(float(roc_auc_score(y[idx], p_new[idx]) - roc_auc_score(y[idx], p_base[idx])))
+    point = float(roc_auc_score(y, p_new) - roc_auc_score(y, p_base))
+    lo, hi = (
+        (float(np.percentile(diffs, 2.5)), float(np.percentile(diffs, 97.5)))
+        if diffs
+        else (point, point)
+    )
+    return {"diff": point, "lo": lo, "hi": hi}
+
+
 def choose_recall_threshold(y: np.ndarray, proba: np.ndarray, target_recall: float) -> float:
     """Largest threshold whose recall >= target. Use out-of-fold predictions, never test."""
     positives = max(int(y.sum()), 1)
@@ -105,6 +125,7 @@ def explain_selection(
     cv: dict[str, dict[str, float]],
     test: dict[str, dict[str, Any]],
     margin: float,
+    diffs: dict[str, dict[str, float]] | None = None,
 ) -> str:
     """Generate the 'which model is best and why' text from the numbers (no hand-typed claims)."""
     ranked = sorted(cv, key=lambda k: -cv[k]["mean"])
@@ -133,6 +154,23 @@ def explain_selection(
         )
     else:
         lines.append("Test ROC-AUC CIs do not overlap with the other models.")
+    if diffs:
+        real = [k for k, d in diffs.items() if d["lo"] > 0 or d["hi"] < 0]
+        if real:
+            lines.append(
+                "Paired bootstrap vs the logistic-regression baseline: "
+                + ", ".join(
+                    f"{k} {diffs[k]['diff']:+.3f} [{diffs[k]['lo']:+.3f}, {diffs[k]['hi']:+.3f}]"
+                    for k in real
+                )
+                + " (interval excludes 0)."
+            )
+        else:
+            lines.append(
+                "Paired bootstrap on the test set: no candidate's ROC-AUC difference from the "
+                "logistic-regression baseline has a 95% interval excluding 0, so none is "
+                "demonstrably better."
+            )
     return " ".join(lines)
 
 

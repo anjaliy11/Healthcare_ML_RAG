@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import os
 import re
 from typing import Any, Protocol, runtime_checkable
 
@@ -118,10 +119,17 @@ class SentenceTransformerEmbedder:
 
     def _load(self):  # type: ignore[no-untyped-def]
         if self._model is None:
+            # Windows without Developer Mode cannot symlink; the warning is noise, the cache works.
+            os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
             from sentence_transformers import SentenceTransformer  # heavy import, keep lazy
 
             self._model = SentenceTransformer(self.name, device="cpu")
-            self.dim = int(self._model.get_sentence_embedding_dimension())
+            # Renamed in sentence-transformers 5.x; accept both so neither emits a FutureWarning.
+            getter = (
+                getattr(self._model, "get_embedding_dimension", None)
+                or self._model.get_sentence_embedding_dimension
+            )
+            self.dim = int(getter())
         return self._model
 
     def _encode(self, texts: list[str]) -> np.ndarray:
